@@ -34,6 +34,7 @@ class ChessPositionAnalyzer:
 
             df = df[df['Move'].isin(legal_moves)]
             df['Probability'] = df['Probability'] / df['Probability'].sum()
+            df = df.sort_values(by='Probability', ascending=False)
 
         return df, value
 
