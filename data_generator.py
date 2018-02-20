@@ -57,7 +57,6 @@ class ChessDataGenerator:
         np.random.shuffle(indexes)
         return indexes
 
-    @threading_util.thread_safe_generator
     def iter_pgn_chunk(self):
         """
         A generator for downloading and parsing a chunk of data, specified by self.download_chunk_size

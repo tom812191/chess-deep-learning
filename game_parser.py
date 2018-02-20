@@ -90,10 +90,12 @@ class ChessGameParser:
         """
         self.config = cfg
         self.game = game
-        self.white_elo = ChessGameParser.normalize_elo(int(game.headers['WhiteElo']))
-        self.black_elo = ChessGameParser.normalize_elo(int(game.headers['BlackElo']))
-        self.time_control = ChessGameParser.parse_time_control(game.headers['TimeControl'])
-        self.result = ChessGameParser.parse_result(game.headers['Result'])
+
+        if self.game is not None:
+            self.white_elo = ChessGameParser.normalize_elo(int(game.headers['WhiteElo']))
+            self.black_elo = ChessGameParser.normalize_elo(int(game.headers['BlackElo']))
+            self.time_control = ChessGameParser.parse_time_control(game.headers['TimeControl'])
+            self.result = ChessGameParser.parse_result(game.headers['Result'])
 
     @property
     def has_checkmate(self):
@@ -319,3 +321,21 @@ class ChessGameParser:
         Normalize elo on the range of -1 to 1, assuming min elo is 0 and max elo is 3000
         """
         return elo/1500 - 1
+
+
+class ChessPositionParser(ChessGameParser):
+    """
+    A parser to take a FEN board representation into canonical input for prediction
+    """
+    def __init__(self, fen: str, cfg: config.Config, white_elo: int, black_elo: int, time_control: str):
+        super().__init__(None, cfg)
+
+        self.fen = fen
+
+        self.white_elo = ChessGameParser.normalize_elo(white_elo)
+        self.black_elo = ChessGameParser.normalize_elo(black_elo)
+        self.time_control = ChessGameParser.parse_time_control(time_control)
+
+    @property
+    def input_tensor(self):
+        return self.get_canonical_input(self.fen)
