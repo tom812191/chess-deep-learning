@@ -77,7 +77,11 @@ class ChessDataGenerator:
                 if chunk:
 
                     # Decompress chunk
-                    data = decompressor.decompress(chunk)
+                    try:
+                        data = decompressor.decompress(chunk)
+                    except OSError:
+                        continue
+
                     if data == b'':
                         continue
 
