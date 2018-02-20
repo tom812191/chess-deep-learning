@@ -102,8 +102,10 @@ class ChessDataGenerator:
     @threading_util.thread_safe_generator
     def iter_download_urls(self):
         idx = 0
+        indexes = np.arange(len(self.download_url_list))
+        np.random.shuffle(indexes)
         while True:
-            yield self.download_url_list[idx]
+            yield self.download_url_list[indexes[idx]]
             idx = (idx + 1) % len(self.download_url_list)
 
     @staticmethod

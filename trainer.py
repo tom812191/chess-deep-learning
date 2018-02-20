@@ -1,5 +1,6 @@
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
+from keras.models import load_model
 
 import config
 
@@ -13,7 +14,8 @@ class ChessModelTrainer:
         self.model = model
 
     def train(self):
-        self.compile_model()
+        if not self.config.trainer.continue_from_best:
+            self.compile_model()
 
         training_generator = ChessDataGenerator(self.config, is_cross_validation=False).generate()
         cross_validation_generator = ChessDataGenerator(self.config, is_cross_validation=True).generate()
@@ -41,9 +43,12 @@ class ChessModelTrainer:
 
 if __name__ == '__main__':
     cfg = config.Config()
-    model = ChessModel(cfg)
 
-    model.build_model()
+    if cfg.trainer.continue_from_best:
+        model = load_model(cfg.resources.best_model_path)
+    else:
+        model = ChessModel(cfg)
+        model.build_model()
 
     trainer = ChessModelTrainer(cfg, model)
     trainer.train()

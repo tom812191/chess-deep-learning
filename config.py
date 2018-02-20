@@ -51,10 +51,12 @@ class TrainerConfig:
     training_games = 288868084
     cross_validation_games = 743349
 
-    batch_size = 128
+    batch_size = 1024
 
     steps_per_epoch = 100
     steps_per_epoch_cv = 1
 
     # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
     epochs = training_games * 40 * 2 // (batch_size * steps_per_epoch)
+
+    continue_from_best = True

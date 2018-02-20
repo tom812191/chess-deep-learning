@@ -327,7 +327,7 @@ class ChessPositionParser(ChessGameParser):
     """
     A parser to take a FEN board representation into canonical input for prediction
     """
-    def __init__(self, fen: str, cfg: config.Config, white_elo: int, black_elo: int, time_control: str):
+    def __init__(self, cfg: config.Config, fen: str, white_elo: int, black_elo: int, time_control: str):
         super().__init__(None, cfg)
 
         self.fen = fen
@@ -338,4 +338,12 @@ class ChessPositionParser(ChessGameParser):
 
     @property
     def input_tensor(self):
-        return self.get_canonical_input(self.fen)
+        return np.expand_dims(self.get_canonical_input(self.fen), axis=0)
+
+    def reset(self, fen: str, white_elo: int, black_elo: int, time_control: str):
+        self.fen = fen
+        self.white_elo = ChessGameParser.normalize_elo(white_elo)
+        self.black_elo = ChessGameParser.normalize_elo(black_elo)
+        self.time_control = ChessGameParser.parse_time_control(time_control)
+
+        return self
