@@ -37,10 +37,11 @@ class ModelConfig:
 
 
 class ResourceConfig:
+    # data_directory = os.path.abspath('/home/ubuntu/data/chess-deep-learning')
     data_directory = os.path.abspath('/Users/tom/Projects/Portfolio/data/chess-deep-learning')
     lichess_download_list = os.path.join(data_directory, 'lichess_download_list.txt')
     lichess_download_list_cv = os.path.join(data_directory, 'lichess_download_list_cv.txt')
-    download_chunk_size = 1024  # 1024 * 1024 * 8  # 8 MB
+    download_chunk_size = 10 * 1024  # 1024 * 1024 * 8  # 8 MB
 
     best_model_path = os.path.join(data_directory, 'best_model.hdf5')
 
