@@ -68,6 +68,7 @@ class ChessDataGenerator:
         # Initialize variable to store partial game information (when chunk doesn't end at the end of a game)
         unused_data = ''
 
+        error_count = 0
         # Iterate through download urls
         for url in self.iter_download_urls():
 
@@ -80,6 +81,8 @@ class ChessDataGenerator:
                     try:
                         data = decompressor.decompress(chunk)
                     except OSError:
+                        error_count += 1
+                        print(f'Error decompressing chunk: #{error_count}')
                         continue
 
                     if data == b'':

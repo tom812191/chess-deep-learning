@@ -327,7 +327,8 @@ class ChessPositionParser(ChessGameParser):
     """
     A parser to take a FEN board representation into canonical input for prediction
     """
-    def __init__(self, cfg: config.Config, fen: str, white_elo: int, black_elo: int, time_control: str):
+    def __init__(self, cfg: config.Config, fen='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                 white_elo=1500, black_elo=1500, time_control='3600+30'):
         super().__init__(None, cfg)
 
         self.fen = fen
