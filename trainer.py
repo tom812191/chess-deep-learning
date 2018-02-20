@@ -14,8 +14,10 @@ class ChessModelTrainer:
         self.model = model
 
     def train(self):
+        model = self.model
         if not self.config.trainer.continue_from_best:
             self.compile_model()
+            model = self.model.model
 
         training_generator = ChessDataGenerator(self.config, is_cross_validation=False).generate()
         cross_validation_generator = ChessDataGenerator(self.config, is_cross_validation=True).generate()
@@ -25,7 +27,7 @@ class ChessModelTrainer:
                                         mode='min',
                                         monitor='val_loss')
 
-        self.model.model.fit_generator(generator=training_generator,
+        model.fit_generator(generator=training_generator,
                                        epochs=self.config.trainer.epochs,
                                        steps_per_epoch=self.config.trainer.steps_per_epoch,
                                        validation_steps=self.config.trainer.steps_per_epoch_cv,
