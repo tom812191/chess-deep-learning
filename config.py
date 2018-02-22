@@ -1,6 +1,6 @@
 import os
 
-import uci_util
+from util import uci_util
 
 
 class Config:
@@ -44,20 +44,32 @@ class ResourceConfig:
     download_chunk_size = 10 * 1024  # 1024 * 1024 * 8  # 8 MB
 
     best_model_path = os.path.join(data_directory, 'best_model.hdf5')
+    database_settings_file = os.path.join(data_directory, 'db_settings.json')
 
 
 class TrainerConfig:
     loss_weights = [1.25, 1.0]
 
-    training_games = 288868084
-    cross_validation_games = 743349
-
     batch_size = 1024
-
     steps_per_epoch = 100
     steps_per_epoch_cv = 1
 
-    # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
-    epochs = training_games * 40 * 2 // (batch_size * steps_per_epoch)
-
     continue_from_best = True
+
+    use_curriculum = True
+    curriculum = (
+        {
+            'query_conditions': (
+                'white_elo > 2000',
+                'black_elo > 2000',
+                'has_checkmate',
+                "file_id = 'MLBASE'",
+            ),
+            'approx_rows': 50000
+        },
+
+    )
+
+    # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
+
+    epochs = sum([c['approx_rows'] for c in curriculum]) * 40 * 2 // (batch_size * steps_per_epoch)
