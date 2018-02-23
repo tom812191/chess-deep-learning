@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 
 from util import uci_util
 
@@ -15,6 +16,7 @@ class Config:
         self.model = ModelConfig()
         self.resources = ResourceConfig()
         self.trainer = TrainerConfig()
+        self.training_type = TrainingType
 
 
 class ModelConfig:
@@ -47,16 +49,19 @@ class ResourceConfig:
     database_settings_file = os.path.join(data_directory, 'db_settings.json')
 
 
-class TrainerConfig:
-    loss_weights = [1.25, 1.0]
+class TrainingType(Enum):
+    FILE = 1
+    DATABASE = 2
+    LICHESS = 3
 
-    batch_size = 1024
-    steps_per_epoch = 100
-    steps_per_epoch_cv = 1
+
+class TrainerConfig:
+    # one of (FILE, DATABASE, LICHESS)
+    train_type = TrainingType.FILE
+    loss_weights = [1.25, 1.0]
 
     continue_from_best = True
 
-    use_curriculum = True
     curriculum = (
         {
             'query_conditions': (
@@ -70,6 +75,17 @@ class TrainerConfig:
 
     )
 
+    # Path relative to data directory
+    train_file_name = 'games_curriculum_1.tsv'
+    train_file_games = 35000
+    cv_file_name = 'games_curriculum_cv_1.tsv'
+    cv_file_games = 8421
+
     # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
 
-    epochs = sum([c['approx_rows'] for c in curriculum]) * 40 * 2 // (batch_size * steps_per_epoch)
+    batch_size = 1024
+
+    steps_per_epoch = 40 * 2 * train_file_games // batch_size
+    steps_per_epoch_cv = 40 * 2 * cv_file_games // batch_size
+
+    epochs = 5

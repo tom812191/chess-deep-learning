@@ -4,7 +4,7 @@ from keras.optimizers import Adam
 from dnn.model import ChessModel
 
 import config
-from dnn.data_generator import ChessDataGenerator, ChessCurriculumDataGenerator
+from dnn.data_generator import ChessDataGenerator, ChessCurriculumDataGenerator, ChessFileDataGenerator
 
 
 class ChessModelTrainer:
@@ -18,9 +18,12 @@ class ChessModelTrainer:
             self.compile_model()
             compiled_model = self.model.model
 
-        if self.config.trainer.use_curriculum:
+        if self.config.trainer.train_type == self.config.training_type.DATABASE:
             training_generator = ChessCurriculumDataGenerator(self.config, is_cross_validation=False).generate()
             cross_validation_generator = ChessCurriculumDataGenerator(self.config, is_cross_validation=True).generate()
+        elif self.config.trainer.train_type == self.config.training_type.FILE:
+            training_generator = ChessFileDataGenerator(self.config, is_cross_validation=False).generate()
+            cross_validation_generator = ChessFileDataGenerator(self.config, is_cross_validation=True).generate()
         else:
             training_generator = ChessDataGenerator(self.config, is_cross_validation=False).generate()
             cross_validation_generator = ChessDataGenerator(self.config, is_cross_validation=True).generate()

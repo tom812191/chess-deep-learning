@@ -75,7 +75,7 @@ class ChessDatabaseParser:
 
     rows will have 4 columns: white_elo, black_elo, time_control, pgn
     """
-    def __init__(self, rows: tuple, cfg: config.Config):
+    def __init__(self, rows, cfg: config.Config):
         self.config = cfg
         self.rows = rows
 
@@ -98,16 +98,18 @@ class ChessDatabaseParser:
 
         for white_elo, black_elo, time_control, pgn in self.rows:
             game = chess.pgn.read_game(StringIO(pgn))
-            game.headers['white_elo'] = white_elo
-            game.headers['black_elo'] = black_elo
-            game.headers['time_control'] = time_control
+            game.headers['WhiteElo'] = white_elo
+            game.headers['BlackElo'] = black_elo
+            game.headers['TimeControl'] = time_control
 
             try:
                 parsed_game = ChessGameParser(game, self.config)
             except (KeyError, ValueError) as err:
+                print(game)
                 if self.config.show_warnings:
                     warnings.warn(err)
-                continue
+                raise err
+                # continue
 
             # Get canonical data representations for neural net, aka X, y_policy, y_value
             board_states, move_label_one_hots, value_labels = parsed_game.get_training_examples()
