@@ -53,18 +53,7 @@ class ChessModel:
         policy_out = Dense(self.config.n_labels, kernel_regularizer=l2(model_config.l2_reg), activation='softmax',
                            name='policy_out')(policy_model)
 
-        # Value Output
-        value_model = Conv2D(filters=4, kernel_size=1, data_format='channels_first', use_bias=False,
-                             kernel_regularizer=l2(model_config.l2_reg), name='value_conv-1-4')(res_out)
-        value_model = BatchNormalization(axis=1, name='value_batchnorm')(value_model)
-        value_model = Activation('relu', name='value_relu')(value_model)
-        value_model = Flatten(name='value_flatten')(value_model)
-        value_model = Dense(model_config.value_fc_size, kernel_regularizer=l2(model_config.l2_reg),
-                            activation='relu', name='value_dense')(value_model)
-        value_out = Dense(1, kernel_regularizer=l2(model_config.l2_reg), activation='tanh', name='value_out'
-                          )(value_model)
-
-        self.model = Model(input_layer, [policy_out, value_out], name='chess_model')
+        self.model = Model(input_layer, policy_out, name='chess_model')
 
     def _build_residual_block(self, model, index):
         model_config = self.config.model
