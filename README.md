@@ -1,11 +1,12 @@
 # chess-deep-learning
 
 ## Road Map
-#### 1. Organize Lichess data into a database
-#### 2. Change training strategy, with the goal being to teach a good policy, then dumb down for lower elo players
-* Train on only strong grandmaster games and games with a one strong player against a weaker player. 
-  * Assess model
-* "Dumb down" the algorithm with lower elo games, to learn to differentiate weak play and strong play by elo
-  * Assess model
-#### 3. Implement MCTS on analysis
-* Test on some actual games. Look at win probability when a player played our engines recommended move vs stockfish recommended move.
+#### 1. Organize Lichess database by position
+* Create a table that gives unique positions, with a column that gives the next move that was made and the strength of the player who made it. Use this probability distribution to train policy vectors. 
+#### 2. Retrain network
+* Remove opponent elo from training. 
+* Remove value component, just use stockfish evaluations.
+#### 3. Test network
+* Test network policy against actual move frequency
+* Test MCTS move probabilities against actual move frequency
+** Try fitting MCTS params based on player strength to better predict move probabilities
