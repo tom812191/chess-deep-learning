@@ -28,7 +28,7 @@ class ChessFileDataGenerator:
     @threading_util.thread_safe_generator
     def generate(self):
 
-        file_path  = os.path.join(
+        file_path = os.path.join(
             self.config.resources.data_directory,
             self.config.trainer.cv_file_name if self.is_cross_validation else self.config.trainer.train_file_name
         )

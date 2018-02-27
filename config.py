@@ -16,6 +16,7 @@ class Config:
         self.model = ModelConfig()
         self.resources = ResourceConfig()
         self.trainer = TrainerConfig()
+        self.play = PlayerConfig()
         self.training_type = TrainingType
 
 
@@ -47,6 +48,8 @@ class ResourceConfig:
 
     best_model_path = os.path.join(data_directory, 'best_model.hdf5')
     database_settings_file = os.path.join(data_directory, 'db_settings.json')
+
+    stockfish_path = os.path.join(data_directory, 'stockfish')
 
 
 class TrainingType(Enum):
@@ -89,3 +92,8 @@ class TrainerConfig:
     steps_per_epoch_cv = 40 * 2 * cv_file_games // batch_size
 
     epochs = 5
+
+
+class PlayerConfig:
+    num_simulations = 1200
+    upper_confidence_tree_score_constant = 1.0

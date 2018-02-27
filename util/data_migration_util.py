@@ -1,13 +1,13 @@
 """
 Functions to pull data from Lichess and populate a database
 """
-import psycopg2
 import json
 import sys
 import re
 
 import bz2
 from io import StringIO
+from util.db_util import connect, create_table
 
 import config
 
@@ -65,31 +65,6 @@ def main(recreate_table=False, load_lichess=False, load_millionbase=False):
     if load_millionbase:
         millionbase_pgn_path = '/Users/tom/Projects/Portfolio/data/chess-deep-learning/millionbase-2.22.pgn'
         populate_games(conn, millionbase_pgn_path, 'tr', 'MLBASE', 0, pgn_is_file_path=True)
-
-
-def connect(settings):
-    return psycopg2.connect("dbname='{db_name}' user='{user}' host='{host}' password='{password}' port='{port}'"
-                            .format(**settings))
-
-
-def create_table(conn, name, cols, recreate=False):
-    cur = conn.cursor()
-
-    # Drop the table if it already exists
-    cur.execute(
-        "select exists(select * from information_schema.tables where table_name='{0}')".format(name))
-    if cur.fetchone()[0]:
-        if not recreate:
-            return
-
-        cur.execute("drop table if exists {0}".format(name))
-
-    # Create the table
-    query = """
-                CREATE TABLE IF NOT EXISTS {0} ({1});
-            """.format(name, ', '.join(cols))
-    cur.execute(query)
-    conn.commit()
 
 
 def populate_db(conn, file_path, file_id, partition, chunk_size=1024):

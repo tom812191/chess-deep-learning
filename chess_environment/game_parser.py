@@ -401,10 +401,17 @@ class ChessPositionParser(ChessGameParser):
     def input_tensor(self):
         return np.expand_dims(self.get_canonical_input(self.fen), axis=0)
 
-    def reset(self, fen: str, white_elo: int, black_elo: int, time_control: str):
-        self.fen = fen
-        self.white_elo = ChessGameParser.normalize_elo(white_elo)
-        self.black_elo = ChessGameParser.normalize_elo(black_elo)
-        self.time_control = ChessGameParser.parse_time_control(time_control)
+    def reset(self, fen=None, white_elo=None, black_elo=None, time_control=None):
+        if fen is not None:
+            self.fen = fen
+
+        if white_elo is not None:
+            self.white_elo = ChessGameParser.normalize_elo(white_elo)
+
+        if black_elo is not None:
+            self.black_elo = ChessGameParser.normalize_elo(black_elo)
+
+        if time_control is not None:
+            self.time_control = ChessGameParser.parse_time_control(time_control)
 
         return self
