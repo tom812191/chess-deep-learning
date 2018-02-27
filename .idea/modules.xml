@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../chess-deep-learning/.idea/alpha-zero.iml" filepath="$PROJECT_DIR$/../chess-deep-learning/.idea/alpha-zero.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/chess-deep-learning.iml" filepath="$PROJECT_DIR$/.idea/chess-deep-learning.iml" />
     </modules>
   </component>
 </project>
