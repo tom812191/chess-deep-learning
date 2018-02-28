@@ -3,22 +3,23 @@ Implements Monte Carlo Tree Search for our agent
 """
 from collections import defaultdict
 import chess
+import chess.uci
 import numpy as np
 
 import config
 from chess_environment.game_parser import ChessPositionParser
+from chess_environment.engine import Stockfish
 
 
 class ChessMonteCarloTreeSearch:
     def __init__(self, cfg: config.Config, model, position_parser: ChessPositionParser, num_simulations=None,
-                 fen=chess.STARTING_FEN, stockfish_value=False, deterministic=False, tau=None):
+                 fen=chess.STARTING_FEN, deterministic=False, tau=None):
         """
         Implement monte carlo tree search over possible chess moves.
 
         :param cfg: Global configuration
         :param model: Policy/value deep neural network
         :param position_parser: a ChessPositionParser instance that already contains elo and time control info
-        :param stockfish_value: If true, use stockfish to evaluate positions
         :param deterministic: If true, select the move deterministically, otherwise select probabilistically
         """
         self.config = cfg
@@ -34,6 +35,9 @@ class ChessMonteCarloTreeSearch:
         self.move_map = {chess.Move.from_uci(move): idx for idx, move in enumerate(self.config.labels)}
 
         self.board = chess.Board(fen)
+
+        self.stockfish = Stockfish(self.config)
+
         self.tree = defaultdict(ChessSearchNode)
 
         self.is_white = self.board.turn == chess.WHITE
@@ -142,10 +146,11 @@ class ChessMonteCarloTreeSearch:
         Get the policy and value from the neural network for the current board state
         """
         # Get outputs from neural network
-        policy, value = self.model.predict(self.position_parser.input_tensor)
+        policy = self.model.predict(self.position_parser.input_tensor)[0]
+        value = self.stockfish.eval(self.board) / 10
 
-        value = value[0, 0]
-        policy = policy[0]
+        if not self.is_white:
+            value *= -1
 
         # Mask illegal moves
         masked_policy = policy[legal_moves_indexes]
