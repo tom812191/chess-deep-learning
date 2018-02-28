@@ -2,11 +2,13 @@
 Functions to pull data from Lichess and populate a database
 """
 import json
+import sys
 
 import bz2
 from io import StringIO
 import pymongo
 from pymongo import UpdateOne
+from collections import defaultdict
 
 import chess
 import chess.pgn
@@ -21,7 +23,7 @@ def main(load_lichess=False, load_millionbase=False):
         db_settings = json.load(f)
 
     client = pymongo.MongoClient(db_settings['host'], db_settings['port'])
-    chunk_size = 1024 * 1024 * 8  # 8 MB
+    chunk_size = 1024 * 1024 * 3  # 3 MB
 
     if load_lichess:
 
@@ -70,8 +72,8 @@ def populate_db(client, file_path, chunk_size=1024):
 
             process_games(client, pgn)
 
-            print('Processed {} MB'.format(int(chunks_loaded * chunk_size / (1024 * 1024))))
             chunks_loaded += 1
+            print('Processed {} MB'.format(int(chunks_loaded * chunk_size / (1024 * 1024))))
 
 
 def process_games(client, pgn):
@@ -79,41 +81,74 @@ def process_games(client, pgn):
     db = client.chess
 
     game = chess.pgn.read_game(pgn)
-    bulk_operations = []
+    positions = defaultdict(default_document)
+    game_count = 0
+
     while game is not None:
+
+        if game_count % 1000 == 0:
+            sys.stdout.write('\rGame {}'.format(game_count))
+            sys.stdout.flush()
+
         # Iterate over moves and store positions
         board = game.board()
         white_to_move = True
 
-        white_elo = int(game.headers['WhiteElo']) if 'WhiteElo' in game.headers else 2300,
-        black_elo = int(game.headers['BlackElo']) if 'BlackElo' in game.headers else 2300,
-        time_control = game.headers['TimeControl'] if 'TimeControl' in game.headers else '6600+0',
+        white_elo = map_elo(int(game.headers['WhiteElo']) if 'WhiteElo' in game.headers else 2300)
+        black_elo = map_elo(int(game.headers['BlackElo']) if 'BlackElo' in game.headers else 2300)
 
         for move in game.main_line():
             fen = ' '.join(board.fen().split(' ')[:-2])
             move_uci = move.uci()
 
-            bulk_operations.append(UpdateOne(
-                {'fen': fen},
-                {
-                    '$push': {
-                        'moves': {
-                            'move': move_uci,
-                            'elo': white_elo if white_to_move else black_elo,
-                            'time_control': time_control,
-                        }
-                    },
-                    '$inc': {
-                        'count': 1,
-                    },
-                }, upsert=True
-            ))
+            positions[fen][white_elo if white_to_move else black_elo][move_uci] += 1
+
             board.push(move)
             white_to_move = not white_to_move
 
         game = chess.pgn.read_game(pgn)
+        game_count += 1
 
+    bulk_operations = []
+    for fen, elo_dict in positions.items():
+        increment = {'total': 0}
+        for elo, moves_dict in elo_dict.items():
+            for move, count in moves_dict.items():
+                increment[f'{elo}.{move}'] = count
+                increment['total'] += count
+
+        bulk_operations.append(UpdateOne(
+            {'fen': fen},
+
+            {
+                '$inc': increment,
+            }, upsert=True
+        ))
+
+    print('\nStart DB Write')
     db.positions.bulk_write(bulk_operations)
+
+
+def default_document():
+    def default_move():
+        return 0
+
+    return {
+        'lt_1500': defaultdict(default_move),
+        '1500_2000': defaultdict(default_move),
+        '2000_2500': defaultdict(default_move),
+        'gt_2500': defaultdict(default_move),
+    }
+
+
+def map_elo(elo):
+    if elo < 1500:
+        return 'lt_1500'
+    if elo < 2000:
+        return '1500_2000'
+    if elo < 2500:
+        return '2000_2500'
+    return 'gt_2500'
 
 
 def split_partial_game(pgn: str):
