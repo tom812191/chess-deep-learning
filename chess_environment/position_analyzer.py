@@ -2,6 +2,9 @@ import chess
 import pandas as pd
 
 from chess_environment.game_parser import ChessPositionParser
+from chess_environment.engine import Stockfish
+
+import config
 
 
 class ChessPositionAnalyzer:
@@ -19,11 +22,13 @@ class ChessPositionAnalyzer:
         self.black_elo = black_elo
         self.time_control = time_control
 
+        self.stockfish = Stockfish(config.Config())
+
     def analyze(self, mask_illegal=True):
         policy, value = self.model.predict(self.position_parser.reset(
             self.fen, self.white_elo, self.black_elo, self.time_control).input_tensor)
 
-        value = value[0, 0]
+        value = self.stockfish.eval(chess.Board(self.fen))
         policy = policy[0].tolist()
 
         df = pd.DataFrame(list(zip(self.labels, policy)), columns=['Move', 'Probability'])
