@@ -4,7 +4,7 @@ from keras.optimizers import Adam
 from dnn.model import ChessModel
 
 import config
-from dnn.data_generator import ChessDataGenerator, ChessCurriculumDataGenerator, ChessFileDataGenerator
+from dnn.data import ChessDataGenerator
 
 
 class ChessModelTrainer:
@@ -18,15 +18,9 @@ class ChessModelTrainer:
             self.compile_model()
             compiled_model = self.model.model
 
-        if self.config.trainer.train_type == self.config.training_type.DATABASE:
-            training_generator = ChessCurriculumDataGenerator(self.config, is_cross_validation=False).generate()
-            cross_validation_generator = ChessCurriculumDataGenerator(self.config, is_cross_validation=True).generate()
-        elif self.config.trainer.train_type == self.config.training_type.FILE:
-            training_generator = ChessFileDataGenerator(self.config, is_cross_validation=False).generate()
-            cross_validation_generator = ChessFileDataGenerator(self.config, is_cross_validation=True).generate()
-        else:
-            training_generator = ChessDataGenerator(self.config, is_cross_validation=False).generate()
-            cross_validation_generator = ChessDataGenerator(self.config, is_cross_validation=True).generate()
+        train_from_file = self.config.trainer.train_type == self.config.training_type.FILE
+        training_generator = ChessDataGenerator(self.config, from_file=train_from_file).generate()
+        cross_validation_generator = ChessDataGenerator(self.config, from_file=train_from_file).generate()
 
         checkpoint_cb = ModelCheckpoint(filepath=self.config.resources.best_model_path,
                                         save_best_only=True,
@@ -43,10 +37,8 @@ class ChessModelTrainer:
 
     def compile_model(self):
         optimizer = Adam()
-        loss_functions = ['categorical_crossentropy', 'mean_squared_error']
-        loss_weights = self.config.trainer.loss_weights
-
-        self.model.model.compile(optimizer=optimizer, loss=loss_functions, loss_weights=loss_weights)
+        loss_function = 'categorical_crossentropy'
+        self.model.model.compile(optimizer=optimizer, loss=loss_function)
 
 
 if __name__ == '__main__':

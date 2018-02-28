@@ -7,7 +7,6 @@ import sys
 import bz2
 from io import StringIO
 import pymongo
-from pymongo import UpdateOne
 from collections import defaultdict
 
 import chess
@@ -28,14 +27,7 @@ def main(load_lichess=False, load_millionbase=False):
     if load_lichess:
 
         lichess_files = [
-            ('201801', '2018-01'),
             ('201712', '2017-12'),
-            ('201711', '2017-11'),
-            ('201710', '2017-10'),
-            ('201709', '2017-09'),
-            ('201708', '2017-08'),
-            ('201707', '2017-07'),
-            ('201706', '2017-06'),
         ]
 
         for file in lichess_files:
@@ -84,6 +76,12 @@ def process_games(client, pgn):
     positions = defaultdict(default_document)
     game_count = 0
 
+    # Only look at positions up to 20 half moves in
+    half_move_limit = 20
+
+    # Cache time control elo adjustments to save time
+    tc_cache = {}
+
     while game is not None:
 
         if game_count % 1000 == 0:
@@ -94,10 +92,22 @@ def process_games(client, pgn):
         board = game.board()
         white_to_move = True
 
-        white_elo = map_elo(int(game.headers['WhiteElo']) if 'WhiteElo' in game.headers else 2300)
-        black_elo = map_elo(int(game.headers['BlackElo']) if 'BlackElo' in game.headers else 2300)
+        white_elo = int(game.headers['WhiteElo']) if 'WhiteElo' in game.headers else 2300
+        black_elo = int(game.headers['BlackElo']) if 'BlackElo' in game.headers else 2300
 
+        # Adjust elo for time control
+        tc = game.headers['TimeControl'] if 'TimeControl' in game.headers else '5400+30'
+        elo_adj = tc_cache[tc] if tc in tc_cache else time_control_elo_adjustment(tc)
+
+        white_elo = map_elo(white_elo + elo_adj)
+        black_elo = map_elo(black_elo + elo_adj)
+
+        half_move_counter = 0
         for move in game.main_line():
+            half_move_counter += 1
+            if half_move_counter > half_move_limit:
+                break
+
             fen = ' '.join(board.fen().split(' ')[:-2])
             move_uci = move.uci()
 
@@ -117,7 +127,7 @@ def process_games(client, pgn):
                 increment[f'{elo}.{move}'] = count
                 increment['total'] += count
 
-        bulk_operations.append(UpdateOne(
+        bulk_operations.append(pymongo.UpdateOne(
             {'fen': fen},
 
             {
@@ -161,9 +171,32 @@ def split_partial_game(pgn: str):
     return pgn[:idx], pgn[idx:]
 
 
+def time_control_elo_adjustment(time_control: str):
+        """
+        Adjust elo based on the time controls.
+
+        Shorter time controls correspond to a worse elo. Adjust linearly with a max adjustment of -500
+        """
+        max_tc = 90 * 60 + 30 * 40
+        if time_control == '-':
+            seconds = max_tc
+        else:
+            tc = time_control.split('+')
+            clock, increment = tc[0], 0
+
+            if len(tc) > 1:
+                increment = tc[1]
+
+            seconds = min(int(clock) + int(increment) * 40, max_tc)
+
+        a = 500 / (6600**2)
+
+        return -a * (seconds - 6600)**2
+
+
 if __name__ == '__main__':
     main(
-        load_lichess=False,
+        load_lichess=True,
         load_millionbase=True
     )
 

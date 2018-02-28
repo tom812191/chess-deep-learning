@@ -6,7 +6,8 @@
 #### 2. Retrain network
 * Remove opponent elo from training. 
 * Remove value component, just use stockfish evaluations.
+* Adjust elo based on time control
 #### 3. Test network
 * Test network policy against actual move frequency
 * Test MCTS move probabilities against actual move frequency
-** Try fitting MCTS params based on player strength to better predict move probabilities
+    * Try fitting MCTS params based on player strength to better predict move probabilities
