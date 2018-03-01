@@ -104,9 +104,10 @@ class ChessDataGenerator:
                     batch_count += 1
                     if len(X) < self.batch_size:
                         finished_file = True
-                file_count += 1
+
                 os.remove(os.path.join(dir, f'X_{cv_str}{file_count}.npy'))
                 os.remove(os.path.join(dir, f'y_{cv_str}{file_count}.npy'))
+                file_count += 1
 
     def process_doc(self, doc):
         fen = doc['fen']
