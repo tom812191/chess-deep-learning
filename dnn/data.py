@@ -5,6 +5,7 @@ import numpy as np
 import json
 import pymongo
 import os
+import bz2
 
 import config
 from chess_environment import position_parser
@@ -83,8 +84,15 @@ class ChessDataGenerator:
 
         while True:
             file_count = 1
-            while os.path.exists(os.path.join(dir, f'X_{cv_str}{file_count}.npy')):
+            while os.path.exists(os.path.join(dir, f'X_{cv_str}{file_count}.npy.bz2')):
                 batch_count = 0
+
+                ChessDataGenerator.decompress_file(os.path.join(dir, f'X_{cv_str}{file_count}.npy.bz2'),
+                                                   os.path.join(dir, f'X_{cv_str}{file_count}.npy'))
+
+                ChessDataGenerator.decompress_file(os.path.join(dir, f'y_{cv_str}{file_count}.npy.bz2'),
+                                                   os.path.join(dir, f'y_{cv_str}{file_count}.npy'))
+
                 X_batches = np.load(os.path.join(dir, f'X_{cv_str}{file_count}.npy'))
                 y_batches = np.load(os.path.join(dir, f'y_{cv_str}{file_count}.npy'))
                 finished_file = False
@@ -97,6 +105,8 @@ class ChessDataGenerator:
                     if len(X) < self.batch_size:
                         finished_file = True
                 file_count += 1
+                os.remove(os.path.join(dir, f'X_{cv_str}{file_count}.npy'))
+                os.remove(os.path.join(dir, f'y_{cv_str}{file_count}.npy'))
 
     def process_doc(self, doc):
         fen = doc['fen']
@@ -112,6 +122,12 @@ class ChessDataGenerator:
                     state.append({'fen': fen, 'elo': elo_value})
 
         return state, move_frequency
+
+    @staticmethod
+    def decompress_file(compressed_path, decompressed_path):
+        with open(decompressed_path, 'wb') as new_file, bz2.BZ2File(compressed_path, 'rb') as f:
+            for data in iter(lambda: f.read(100 * 1024), b''):
+                new_file.write(data)
 
 
 def generate_to_file(is_cross_validation=False):
