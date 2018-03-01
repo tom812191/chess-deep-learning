@@ -196,7 +196,7 @@ def time_control_elo_adjustment(time_control: str):
 
 if __name__ == '__main__':
     main(
-        load_lichess=True,
+        load_lichess=False,
         load_millionbase=True
     )
 

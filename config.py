@@ -64,11 +64,11 @@ class TrainerConfig:
     continue_from_best = False
 
     # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
-    total_examples = 366360
+    total_examples = 830469
     training_examples = 9 * total_examples / 10
     cv_examples = total_examples / 10
 
-    batch_size = 1024
+    batch_size = 2048
 
     steps_per_epoch = training_examples // batch_size
     steps_per_epoch_cv = cv_examples // batch_size
