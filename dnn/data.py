@@ -131,7 +131,7 @@ def generate_to_file(is_cross_validation=False):
 
     for X, y in cdg.generate():
         if batch_count > total_batches:
-            return
+            break
 
         if X_batches is None:
             X_batches = X
@@ -148,3 +148,6 @@ def generate_to_file(is_cross_validation=False):
             y_batches = None
 
         batch_count += 1
+
+    np.save(os.path.join(dir, f'X_{cv_str}{file_count}.npy'), X_batches)
+    np.save(os.path.join(dir, f'y_{cv_str}{file_count}.npy'), y_batches)
