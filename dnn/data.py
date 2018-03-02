@@ -100,7 +100,10 @@ class ChessDataGenerator:
                     indexes = slice(batch_count * self.batch_size, (batch_count+1) * self.batch_size)
                     X = X_batches[indexes]
                     y = y_batches[indexes]
-                    yield X, y
+
+                    if len(X > 0) and len(y > 0):
+                        yield X, y
+
                     batch_count += 1
                     if len(X) < self.batch_size:
                         finished_file = True
