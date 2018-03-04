@@ -15,4 +15,9 @@ class Stockfish:
     def eval(self, board):
         self.stockfish.position(board)
         self.stockfish.go(depth=1)
-        return self.stockfish_info.info["score"][1].cp / 100.0
+        cp = self.stockfish_info.info['score'][1].cp
+        if cp is not None:
+            return cp / 100.0
+
+        # Mate in 1
+        return 100.0

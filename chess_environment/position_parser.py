@@ -15,7 +15,7 @@ class ChessPositionParser:
          1 player elo
     """
 
-    def __init__(self, cfg: config.Config, fens: list, elos: list, fens_have_counters=False):
+    def __init__(self, cfg: config.Config, fens: list, elos: list, fens_have_counters=False, elos_are_normalized=True):
         """
         Create the chess game
         :param fens: List of fen strings
@@ -25,9 +25,20 @@ class ChessPositionParser:
         """
         self.config = cfg
         self.fens = fens if fens_have_counters else ChessPositionParser.full_fens(fens)
-        self.elos = elos
+        self.elos = elos if elos_are_normalized else [ChessPositionParser.normalize_elo(elo) for elo in elos]
 
         assert len(fens) == len(elos)
+
+    def reset(self, fens=None, elos=None, fens_have_counters=False, elos_are_normalized=True):
+        if fens is not None:
+            self.fens = fens if fens_have_counters else ChessPositionParser.full_fens(fens)
+
+        if elos is not None:
+            self.elos = elos if elos_are_normalized else [ChessPositionParser.normalize_elo(elo) for elo in elos]
+
+        assert len(self.fens) == len(self.elos)
+
+        return self
 
     def get_canonical_input(self):
         """
