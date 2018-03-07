@@ -6,6 +6,8 @@ import chess
 import chess.uci
 import numpy as np
 import json
+import pickle
+import os
 from typing import Optional
 
 import config
@@ -47,7 +49,8 @@ class ChessMonteCarloTreeSearch:
         self.move_probabilities = None
 
         # Cache for predictions from the neural network and stockfish valuations
-        self.prediction_cache = {}
+        self.cache_path = self.config.play.mcts_cache_path
+        self.prediction_cache = pickle.load(open(self.cache_path, 'rb')) if os.path.exists(self.cache_path) else {}
         self.prediction_cache_size = self.config.play.mcts_cache_size
 
     @property
@@ -59,6 +62,7 @@ class ChessMonteCarloTreeSearch:
         self.position_parser.reset(fens=[fen], fens_have_counters=True)
         self.tree = defaultdict(ChessSearchNode)
         self.move_probabilities = None
+        self.is_white = self.board.turn == chess.WHITE
 
         if num_simulations is not None:
             self.num_simulations = num_simulations
@@ -78,6 +82,8 @@ class ChessMonteCarloTreeSearch:
         if self.move_probabilities is None:
             self.search_moves()
             self.calc_move_probabilities()
+
+        pickle.dump(self.prediction_cache, open(self.cache_path, 'wb'))
 
         return self.move_probabilities
 
@@ -120,8 +126,8 @@ class ChessMonteCarloTreeSearch:
         state = self.current_state
 
         if state not in self.tree:
-            policy, value, move_indexes = self.expand_node()
-            self.tree[state].set_predictions(policy, value, move_indexes)
+            policy, value, move_indexes, children_static_values = self.expand_node()
+            self.tree[state].set_predictions(policy, value, move_indexes, children_static_values)
             return value
 
         # Select the next node
@@ -147,7 +153,8 @@ class ChessMonteCarloTreeSearch:
         """
         legal_move_indexes = [self.move_map[m] for m in self.board.legal_moves]
         policy, value = self.predict(legal_move_indexes)
-        return policy, value, legal_move_indexes
+        children_static_values = self.predict_values(self.board.legal_moves)
+        return policy, value, legal_move_indexes, children_static_values
 
     def select_node(self):
         """
@@ -202,11 +209,24 @@ class ChessMonteCarloTreeSearch:
 
         return policy, value
 
+    def predict_values(self, moves):
+        """
+        Get static values from stockfish for leaf nodes
+        """
+        values = []
+        for move in moves:
+            self.board.push(move)
+            values.append(-1 * self.stockfish.eval(self.board) / 10)
+            self.board.pop()
+
+        return values
+
     def upper_confidence_tree_score(self, node_stats, parent_visits):
         """
         Get the upper confidence tree score for the current node
         """
-        return node_stats.accumulated_value / (1 + node_stats.num_visits) + \
+        accumulated_value = node_stats.accumulated_value if node_stats.num_visits > 0 else node_stats.static_value
+        return accumulated_value / (1 + node_stats.num_visits) + \
                self.ucts_const * node_stats.prior_probability * np.sqrt(np.log(parent_visits) / (1 + node_stats.num_visits))
 
     def calc_move_probabilities(self):
@@ -230,16 +250,17 @@ class ChessMonteCarloTreeSearch:
         """
         Delete half of the cache with the fewest visits
         """
+        print('Cache purge')
         median = np.median(np.array([value['visits'] for _, value in self.prediction_cache.items()]))
         self.prediction_cache = {key: value for key, value in self.prediction_cache.items() if value['visits'] > median}
 
-    def get_json(self, max_depth=6, agg_empty_leaves=True):
+    def get_json(self, max_depth=6, agg_empty_leaves=False):
         """
         Convert the results of the search tree to JSON. The JSON will look like:
 
         {
             fen: "xxx",
-            naked_value: xxx,
+            static_value: xxx,
             rollup_value: xxx,
             visits: xxx,
             prior_probability,
@@ -247,7 +268,7 @@ class ChessMonteCarloTreeSearch:
                 fen: xxx,
                 move: xxx,
 
-                naked_value: xxx,
+                static_value: xxx,
                 total_visits: xxx,
 
                 rollup_value: xxx,
@@ -282,7 +303,7 @@ class ChessMonteCarloTreeSearch:
                 'fen': fen,
                 'prev_move': move_san,
 
-                'naked_value': node.naked_value * 10 * (-1 if current_depth % 2 else 1),
+                'static_value': node.static_value * 10 * (-1 if current_depth % 2 else 1),
                 'total_visits': node.total_visits,
 
                 'rollup_value': rollup_value,
@@ -304,7 +325,7 @@ class ChessMonteCarloTreeSearch:
                     if len(leaves) > 0:
                         agg_leaf = {
                             'prev_move': ', '.join([l['prev_move'] for l in leaves][:5]) + ('...' if len(leaves) > 5 else ''),
-                            'naked_value': np.mean(np.array([l['naked_value'] for l in leaves])),
+                            'static_value': np.mean(np.array([l['static_value'] for l in leaves])),
                             'total_visits': len(leaves),
                             'rollup_value': 0,
                             'rollup_visits': 0,
@@ -336,18 +357,21 @@ class ChessSearchNode:
 
         self.children_policy = None
         self.children_move_indexes = None
-        self.naked_value = 0
+        self.children_static_values = None
+        self.static_value = 0
 
         self.children_created = False
 
-    def set_predictions(self, children_policy, naked_value, children_move_indexes):
+    def set_predictions(self, children_policy, static_value, children_move_indexes, children_static_values):
         self.children_policy = children_policy
-        self.naked_value = naked_value
+        self.static_value = static_value
         self.children_move_indexes = children_move_indexes
+        self.children_static_values = children_static_values
 
     def create_children(self):
         for idx, move_idx in enumerate(self.children_move_indexes):
             self.children[move_idx].prior_probability = self.children_policy[idx]
+            self.children[move_idx].static_value = self.children_static_values[idx]
         self.children_created = True
 
 
@@ -359,3 +383,4 @@ class ChessNodeStats:
         self.num_visits = 0
         self.accumulated_value = 0
         self.prior_probability = 0
+        self.static_value = 0

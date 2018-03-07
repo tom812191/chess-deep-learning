@@ -84,3 +84,4 @@ class PlayerConfig:
     upper_confidence_tree_score_constant = 1.0
 
     mcts_cache_size = 10000
+    mcts_cache_path = '/users/tom/tmp/cache.p'

@@ -1,23 +1,44 @@
-import chess.uci
-
 import config
+import chess
+import subprocess
+import re
 
 
 class Stockfish:
     def __init__(self, cfg: config.Config):
         self.config = cfg
 
-        self.stockfish = chess.uci.popen_engine(self.config.resources.stockfish_path)
-        self.stockfish.uci()
-        self.stockfish_info = chess.uci.InfoHandler()
-        self.stockfish.info_handlers.append(self.stockfish_info)
+        self.stockfish = subprocess.Popen(
+            cfg.resources.stockfish_path,
+            universal_newlines=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE
+        )
+
+    def _send_command(self, command: str):
+        self.stockfish.stdin.write(command + '\n')
+        self.stockfish.stdin.flush()
+
+    def _set_position(self, fen):
+        self._send_command(f'position fen {fen}')
 
     def eval(self, board):
-        self.stockfish.position(board)
-        self.stockfish.go(depth=1)
-        cp = self.stockfish_info.info['score'][1].cp
-        if cp is not None:
-            return cp / 100.0
+        """
+        Static evaluation for player to move
+        """
+        self._set_position(board.fen())
+        self._send_command('eval')
 
-        # Mate in 1
-        return 100.0
+        evaluation = re.compile('Total Evaluation: (-?\d+\.\d+) .*')
+
+        while True:
+            line = self.stockfish.stdout.readline()
+            match = evaluation.match(line)
+            if match:
+                score = float(match.group(1))
+                if board.turn == chess.BLACK:
+                    score *= -1
+                return score
+
+    def __del__(self):
+        self.stockfish.kill()
