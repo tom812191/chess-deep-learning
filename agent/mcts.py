@@ -8,11 +8,51 @@ import numpy as np
 import json
 import pickle
 import os
-from typing import Optional
 
 import config
 from chess_environment.position_parser import ChessPositionParser
 from chess_environment.engine import Stockfish
+
+
+class ChessSearchNode:
+    """
+    A node in the Monte Carlo Search Tree
+    """
+    def __init__(self):
+        self.children = defaultdict(ChessSearchNode)
+        self.parent = None
+
+        self.prior_probability = None
+
+        self.move_index = None
+        self.visits = 0
+        self.static_value = None
+        self.accumulated_value = 0
+        self.average_value = 0
+
+        self.children_created = False
+        self.is_game_over = False
+        self.our_move = True
+        self.depth = 0
+
+    def expand(self, policy, values, move_indexes):
+        if self.children_created:
+            raise RuntimeError('Children already created for node')
+
+        for child_index, move_index in enumerate(move_indexes):
+            self.children[move_index].parent = self
+            self.children[move_index].move_index = move_index
+            self.children[move_index].static_value = values[child_index]
+            self.children[move_index].prior_probability = policy[child_index]
+            self.children[move_index].is_game_over = type(values[child_index]) == int
+            self.children[move_index].our_move = not self.our_move
+            self.children[move_index].depth = self.depth + 1
+
+            self.children_created = True
+
+    def accumulate_value(self, value):
+        self.accumulated_value += value
+        self.average_value = self.accumulated_value / self.visits
 
 
 class ChessMonteCarloTreeSearch:
@@ -42,9 +82,9 @@ class ChessMonteCarloTreeSearch:
 
         self.stockfish = stockfish or Stockfish(self.config)
 
-        self.tree = defaultdict(ChessSearchNode)
-
+        self.root = ChessSearchNode()
         self.is_white = self.board.turn == chess.WHITE
+        self.root_move_counter = int(fen.split(' ')[-1]) + (0 if self.is_white else 0.5)
 
         self.move_probabilities = None
 
@@ -60,9 +100,10 @@ class ChessMonteCarloTreeSearch:
     def set_position(self, fen, num_simulations=None, tau=None, ucts_const=None):
         self.board = chess.Board(fen)
         self.position_parser.reset(fens=[fen], fens_have_counters=True)
-        self.tree = defaultdict(ChessSearchNode)
+        self.root = ChessSearchNode()
         self.move_probabilities = None
         self.is_white = self.board.turn == chess.WHITE
+        self.root_move_counter = int(fen.split(' ')[-1]) + (0 if self.is_white else 0.5)
 
         if num_simulations is not None:
             self.num_simulations = num_simulations
@@ -80,7 +121,7 @@ class ChessMonteCarloTreeSearch:
         Calculate the new policy based on the MCTS
         """
         if self.move_probabilities is None:
-            self.search_moves()
+            self.run_search()
             self.calc_move_probabilities()
 
         pickle.dump(self.prediction_cache, open(self.cache_path, 'wb'))
@@ -99,84 +140,82 @@ class ChessMonteCarloTreeSearch:
 
         return np.random.choice(self.config.labels, p=mcts_policy)
 
-    def search_moves(self):
+    def run_search(self):
         """
         Run the monte carlo tree search to find the best next move
         """
+        # Create the root node
+        value = self.stockfish_eval_to_value(self.stockfish.eval(self.board))
+        self.root.static_value = value
+        self.root.prior_probability = 1.0
+
+        # Expand the first set of leaf nodes
+        policy, values, move_indexes = self.expand_node(self.root)
+        self.root.expand(policy, values, move_indexes)
+
+        # Run simulations
         for _ in range(self.num_simulations):
-            self.search_node(is_opponent=False)
+            self.search_node(self.root)
 
         return self
 
-    def search_node(self, is_opponent=False):
+    def search_node(self, node: ChessSearchNode):
         """
         Search the current tree node.
 
         Return the value from the perspective of the player to play, where positive value is winning
         """
+
         # Check if game is over
-        result = self.board.result()
-        if result == '1/2-1/2':
-            return 0
-        elif result != '*':
-            # Player to move has lost. If game is over and not a draw, then previous move was winning move, so
-            # this player lost
-            return -10
+        if node.is_game_over:
+            node.visits += 1
+            node.accumulate_value(node.static_value)
+            return node.average_value
 
-        state = self.current_state
+        # If at a leaf node, expand
+        if not node.children_created:
+            policy, values, move_indexes = self.expand_node(node)
+            node.expand(policy, values, move_indexes)
+            return node.static_value
 
-        if state not in self.tree:
-            policy, value, move_indexes, children_static_values = self.expand_node()
-            self.tree[state].set_predictions(policy, value, move_indexes, children_static_values)
-            return value
+        node.visits += 1
 
         # Select the next node
-        move_index = self.select_node()
-
-        # Update statistics
-        current_node = self.tree[state]
-        current_node.total_visits += 1
+        move_index = self.select_child(node)
 
         # Search next move
         self.board.push(chess.Move.from_uci(self.config.labels[move_index]))
-        next_value = -self.search_node(is_opponent=(not is_opponent))
-        node_stats = current_node.children[move_index]
-        node_stats.num_visits += 1
-        node_stats.accumulated_value += next_value
+        value = -self.search_node(node.children[move_index])
+        node.accumulate_value(value)
         self.board.pop()
 
-        return next_value
+        return value
 
-    def expand_node(self):
+    def expand_node(self, node):
         """
-        Expand the current board position
+        Expand the current board position. Get the prior move probabilities and next position values for all
+        legal moves.
         """
         legal_move_indexes = [self.move_map[m] for m in self.board.legal_moves]
-        policy, value = self.predict(legal_move_indexes)
-        children_static_values = self.predict_values(self.board.legal_moves)
-        return policy, value, legal_move_indexes, children_static_values
+        policy, values = self.predict(self.board.legal_moves, legal_move_indexes, node.depth + self.root_move_counter)
+        return policy, values, legal_move_indexes
 
-    def select_node(self):
+    def select_child(self, node):
         """
         Select the next node to explore based on the upper confidence bound
         """
-        state = self.current_state
-        current_node = self.tree[state]
-
-        if not current_node.children_created:
-            current_node.create_children()
 
         best_move_idx = None
         best_score = -1000
-        for move_idx, move_stats in current_node.children.items():
-            uct_score = self.upper_confidence_tree_score(move_stats, current_node.total_visits)
+        for move_idx, child in node.children.items():
+            uct_score = self.upper_confidence_tree_score(child)
             if uct_score > best_score:
                 best_score = uct_score
                 best_move_idx = move_idx
 
         return best_move_idx
 
-    def predict(self, legal_moves_indexes):
+    def predict(self, legal_moves, legal_moves_indexes, move_counter):
         """
         Get the policy and value from the neural network for the current board state.
 
@@ -185,61 +224,53 @@ class ChessMonteCarloTreeSearch:
         """
 
         fen = self.board.fen()[:-2]
-        if fen in self.prediction_cache:
-            self.prediction_cache[fen]['visits'] += 1
-            return self.prediction_cache[fen]['policy'], self.prediction_cache[fen]['value']
 
-        # Get outputs from neural network
+        # Get the policy for legal follow up moves
+        if fen in self.prediction_cache:
+            policy = self.prediction_cache[fen]['policy']
+            values = self.prediction_cache[fen]['values']
+            return policy, values
+
         policy = self.model.predict(self.position_parser.get_canonical_input())[0]
-        value = self.stockfish.eval(self.board) / 10
 
         # Mask illegal moves
         masked_policy = policy[legal_moves_indexes]
         policy = masked_policy / masked_policy.sum()
 
-        # Cache the value
-        self.prediction_cache[fen] = {
-            'policy': policy,
-            'value': value,
-            'visits': 1,
-        }
-
-        if len(self.prediction_cache) > self.prediction_cache_size:
-            self.reduce_cache()
-
-        return policy, value
-
-    def predict_values(self, moves):
-        """
-        Get static values from stockfish for leaf nodes
-        """
         values = []
-        for move in moves:
+        for move in legal_moves:
             self.board.push(move)
-            values.append(-1 * self.stockfish.eval(self.board) / 10)
+            values.append(self.stockfish_eval_to_value(self.stockfish.eval(self.board)))
             self.board.pop()
 
-        return values
+            # Cache the value
+            self.prediction_cache[fen] = {
+                'policy': policy,
+                'values': values,
+                'move_counter': move_counter,
+            }
 
-    def upper_confidence_tree_score(self, node_stats, parent_visits):
+            if len(self.prediction_cache) > self.prediction_cache_size:
+                self.reduce_cache()
+
+        return policy, values
+
+    def upper_confidence_tree_score(self, node: ChessSearchNode):
         """
         Get the upper confidence tree score for the current node
         """
-        accumulated_value = node_stats.accumulated_value if node_stats.num_visits > 0 else node_stats.static_value
-        return accumulated_value / (1 + node_stats.num_visits) + \
-               self.ucts_const * node_stats.prior_probability * np.sqrt(np.log(parent_visits) / (1 + node_stats.num_visits))
+        value = -1 * (node.average_value if node.visits > 0 else node.static_value)
+        return value + self.ucts_const * node.prior_probability * \
+                               np.sqrt(np.log(node.parent.visits) / (1 + node.visits))
 
     def calc_move_probabilities(self):
         """
         Get the pi vector of move probabilities based on node visit frequency
         """
-        state = self.current_state
-        node = self.tree[state]
-
         self.move_probabilities = np.zeros(self.config.n_labels)
 
-        for move_idx, child in node.children.items():
-            self.move_probabilities[move_idx] = child.num_visits
+        for move_idx, child in self.root.children.items():
+            self.move_probabilities[move_idx] = child.visits
 
         self.move_probabilities /= np.sum(self.move_probabilities)
         if self.tau is not None:
@@ -248,78 +279,46 @@ class ChessMonteCarloTreeSearch:
 
     def reduce_cache(self):
         """
-        Delete half of the cache with the fewest visits
+        Delete cache for old positions and lines far ahead
         """
-        print('Cache purge')
-        median = np.median(np.array([value['visits'] for _, value in self.prediction_cache.items()]))
-        self.prediction_cache = {key: value for key, value in self.prediction_cache.items() if value['visits'] > median}
+        self.prediction_cache = {key: value for key, value in self.prediction_cache.items()
+                                 if (value['move_counter'] <= self.root_move_counter)
+                                 or (value['move_counter'] > self.root_move_counter + 5)}
 
     def get_json(self, max_depth=6, agg_empty_leaves=False):
         """
-        Convert the results of the search tree to JSON. The JSON will look like:
-
-        {
-            fen: "xxx",
-            static_value: xxx,
-            rollup_value: xxx,
-            visits: xxx,
-            prior_probability,
-            children: [{
-                fen: xxx,
-                move: xxx,
-
-                static_value: xxx,
-                total_visits: xxx,
-
-                rollup_value: xxx,
-                rollup_visits: xxx,
-                prior_probability: xxx,
-
-                children: [...],
-            }, ...],
-        }
+        Convert the results of the search tree to JSON.
         """
-        def process_tree(board: chess.Board, move_uci: Optional[str],
-                         prior_probability: float, current_depth: int, parent_visits=None):
-            if move_uci is None:
+        def process_tree(node: ChessSearchNode, board: chess.Board):
+            if node.move_index is None:
                 fen = board.fen()
                 move_san = ''
             else:
-                move = chess.Move.from_uci(move_uci)
+                move = chess.Move.from_uci(self.config.labels[node.move_index])
                 move_san = board.san(move)
                 board.push(move)
                 fen = board.fen()
 
-            node = self.tree[fen]
-
-            if parent_visits is None:
-                parent_visits = node.total_visits
-
-            rollup_value = sum([child.accumulated_value for _, child in node.children.items()])
-            rollup_value *= (-1 if current_depth % 2 else 1) * 10
-            rollup_visits = sum([child.num_visits for _, child in node.children.items()])
+            value_factor = 1 if node.our_move else -1
 
             tree = {
                 'fen': fen,
                 'prev_move': move_san,
 
-                'static_value': node.static_value * 10 * (-1 if current_depth % 2 else 1),
-                'total_visits': node.total_visits,
+                'static_value': float(node.static_value) * value_factor,
+                'stockfish_value': float(self.value_to_stockfish_eval(node.static_value)) * value_factor,
+                'visits': int(node.visits),
 
-                'rollup_value': rollup_value,
-                'rollup_visits': rollup_visits,
-                'avg_value': rollup_value / rollup_visits if rollup_visits > 0 else 0,
-                'prior_probability': prior_probability,
-                'posterior_probability': node.total_visits / parent_visits,
+                'average_value': float(node.average_value) * value_factor,
+                'prior_probability': float(node.prior_probability),
+                'posterior_probability': float(node.visits / node.parent.visits) if node.parent and node.parent.visits > 0 is not None else 1,
             }
 
-            if node.children_created and current_depth < max_depth:
-                children = [
-                    process_tree(board, self.config.labels[move_index],
-                                 float(node.children[move_index].prior_probability), current_depth + 1, parent_visits=node.total_visits)
-                    for move_index in node.children_move_indexes if node.children[move_index].num_visits > 0]
-                children = sorted(children, key=lambda child: child['total_visits'], reverse=True)
+            if node.children_created and node.depth < max_depth:
+                children = [process_tree(child, board) for move_index, child in node.children.items()]
+                children = sorted(children, key=lambda child: child['visits'], reverse=True)
 
+                """
                 if agg_empty_leaves:
                     leaves = [c for c in children if c['total_visits'] == 1]
                     if len(leaves) > 0:
@@ -334,53 +333,36 @@ class ChessMonteCarloTreeSearch:
                             'posterior_probability': len(leaves) / parent_visits,
                         }
                         children = [c for c in children if c['total_visits'] > 1] + [agg_leaf]
+                        
+                """
 
                 tree['children'] = children
 
-            if current_depth > 0:
+            if node.depth > 0:
                 board.pop()
 
             return tree
 
         board = self.board.copy()
-        tree = process_tree(board, None, 1.0, 0)
+        tree = process_tree(self.root, board)
         return json.dumps(tree)
 
+    @staticmethod
+    def stockfish_eval_to_value(evaluation, k=0.6):
+        """
+        Convert the stockfish evaluation in the range of roughly -100 to +100 to -1 to +1 using
+        a logistic function
+        """
+        return 2/(1 + np.exp(-k * evaluation)) - 1
 
-class ChessSearchNode:
-    """
-    A node in the Monte Carlo Search Tree
-    """
-    def __init__(self):
-        self.children = defaultdict(ChessNodeStats)
-        self.total_visits = 1
+    @staticmethod
+    def value_to_stockfish_eval(value, k=0.6):
+        """
+        Inverse of stockfish value conversion
+        """
+        if value >= 1:
+            return 100
+        elif value <= -1:
+            return -100
 
-        self.children_policy = None
-        self.children_move_indexes = None
-        self.children_static_values = None
-        self.static_value = 0
-
-        self.children_created = False
-
-    def set_predictions(self, children_policy, static_value, children_move_indexes, children_static_values):
-        self.children_policy = children_policy
-        self.static_value = static_value
-        self.children_move_indexes = children_move_indexes
-        self.children_static_values = children_static_values
-
-    def create_children(self):
-        for idx, move_idx in enumerate(self.children_move_indexes):
-            self.children[move_idx].prior_probability = self.children_policy[idx]
-            self.children[move_idx].static_value = self.children_static_values[idx]
-        self.children_created = True
-
-
-class ChessNodeStats:
-    """
-    A node's MCTS statistics
-    """
-    def __init__(self):
-        self.num_visits = 0
-        self.accumulated_value = 0
-        self.prior_probability = 0
-        self.static_value = 0
+        return (-1 / k) * np.log(2/(1 + value) - 1)

@@ -10,7 +10,7 @@ from agent import mcts
 import config
 
 
-def main(engine_color):
+def main(engine_color, starting_position=chess.STARTING_FEN):
     # Initialize the configuration
     cfg = config.Config()
 
@@ -23,11 +23,11 @@ def main(engine_color):
     sf = Stockfish(config.Config())
     ts = mcts.ChessMonteCarloTreeSearch(cfg, model, pp, stockfish=sf, deterministic=True)
 
-    board = chess.Board()
+    board = chess.Board(starting_position)
     while True:
         if board.turn == engine_color:
             print('Calculating next move...')
-            next_move_uci = ts.set_position(board.fen(), num_simulations=num_simulations, tau=None, ucts_const=0.5).get_next_move()
+            next_move_uci = ts.set_position(board.fen(), num_simulations=num_simulations, tau=None, ucts_const=2.0).get_next_move()
             next_move = chess.Move.from_uci(next_move_uci)
             print(board.san(next_move))
             board.push(next_move)
@@ -44,4 +44,4 @@ def main(engine_color):
 
 
 if __name__ == '__main__':
-    main(chess.BLACK)
+    main(chess.WHITE, starting_position='r1b1kbnr/pppp1ppp/2n5/4P3/1q3B2/5N2/PPP1PPPP/RN1QKB1R w KQkq - 5 5')

@@ -26,6 +26,15 @@ class Stockfish:
         """
         Static evaluation for player to move
         """
+        # Check if game over
+        if board.result() != '*':
+            if board.result == '1/2-1/2':
+                return int(0)
+
+            # If the game is over and not a draw, then the player to move has lost (tree search doesn't resign)
+            return int(-1)
+
+        # Get Evaluation
         self._set_position(board.fen())
         self._send_command('eval')
 
@@ -38,7 +47,7 @@ class Stockfish:
                 score = float(match.group(1))
                 if board.turn == chess.BLACK:
                     score *= -1
-                return score
+                return float(score)
 
     def __del__(self):
         self.stockfish.kill()
