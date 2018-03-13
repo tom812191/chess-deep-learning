@@ -24,6 +24,10 @@ class ChessSearchNode:
 
         self.prior_probability = None
 
+        self.child_move_indexes = None
+        self.child_policy = None
+        self.child_values = None  # Values from this node's POV
+
         self.move_index = None
         self.visits = 0
         self.static_value = None
@@ -31,7 +35,6 @@ class ChessSearchNode:
         self.average_value = 0
 
         self.children_created = False
-        self.is_game_over = False
         self.our_move = True
         self.depth = 0
 
@@ -39,12 +42,15 @@ class ChessSearchNode:
         if self.children_created:
             raise RuntimeError('Children already created for node')
 
+        self.child_policy = policy
+        self.child_values = -1 * np.array(values)
+        self.child_move_indexes = move_indexes
+
         for child_index, move_index in enumerate(move_indexes):
             self.children[move_index].parent = self
             self.children[move_index].move_index = move_index
             self.children[move_index].static_value = values[child_index]
             self.children[move_index].prior_probability = policy[child_index]
-            self.children[move_index].is_game_over = type(values[child_index]) == int
             self.children[move_index].our_move = not self.our_move
             self.children[move_index].depth = self.depth + 1
 
@@ -57,7 +63,8 @@ class ChessSearchNode:
 
 class ChessMonteCarloTreeSearch:
     def __init__(self, cfg: config.Config, model, position_parser: ChessPositionParser, num_simulations=None,
-                 ucts_const=None, fen=chess.STARTING_FEN, deterministic=False, tau=None, stockfish=None):
+                 ucts_const=None, fen=chess.STARTING_FEN, deterministic=False, tau=None, stockfish=None,
+                 player_elo=1500, opponent_elo=1500, rating_transform_const=0.3):
         """
         Implement monte carlo tree search over possible chess moves.
 
@@ -72,6 +79,10 @@ class ChessMonteCarloTreeSearch:
         self.num_simulations = num_simulations or self.config.play.num_simulations
         self.deterministic = deterministic
         self.tau = tau
+
+        self.player_elo = player_elo
+        self.opponent_elo = opponent_elo
+        self.rating_transform_const = rating_transform_const
 
         # Upper confidence tree score constant
         self.ucts_const = ucts_const or self.config.play.upper_confidence_tree_score_constant
@@ -167,7 +178,7 @@ class ChessMonteCarloTreeSearch:
         """
 
         # Check if game is over
-        if node.is_game_over:
+        if self.board.result() != '*':
             node.visits += 1
             node.accumulate_value(node.static_value)
             return node.average_value
@@ -181,7 +192,7 @@ class ChessMonteCarloTreeSearch:
         node.visits += 1
 
         # Select the next node
-        move_index = self.select_child(node)
+        move_index = self.select_child_stochastic(node)
 
         # Search next move
         self.board.push(chess.Move.from_uci(self.config.labels[move_index]))
@@ -214,6 +225,20 @@ class ChessMonteCarloTreeSearch:
                 best_move_idx = move_idx
 
         return best_move_idx
+
+    def select_child_stochastic(self, node: ChessSearchNode):
+        """
+        Stochastically select a child with probabilities weighted by prior and value
+        """
+        r_exp = self.rating_exponent_transform(self.player_elo if node.our_move else self.opponent_elo)
+        v_prime = (np.max(node.child_values) - node.child_values) / 2
+        p_prime = node.child_policy * np.power(1 - v_prime, r_exp)
+        pi = p_prime / p_prime.sum()
+
+        return np.random.choice(node.child_move_indexes, p=pi)
+
+    def rating_exponent_transform(self, rating):
+        return self.rating_transform_const * np.sqrt(rating)
 
     def predict(self, legal_moves, legal_moves_indexes, move_counter):
         """

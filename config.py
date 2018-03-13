@@ -59,9 +59,9 @@ class TrainingType(Enum):
 
 class TrainerConfig:
     # one of (FILE, DATABASE)
-    train_type = TrainingType.DATABASE
+    train_type = TrainingType.FILE
 
-    continue_from_best = False
+    continue_from_best = True
 
     # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
     total_examples = 830469
@@ -75,8 +75,8 @@ class TrainerConfig:
 
     epochs = 5
 
-    min_position_visits_total = 10
-    min_position_visits = 5
+    min_position_visits_total = 6
+    min_position_visits = 3
 
 
 class PlayerConfig:

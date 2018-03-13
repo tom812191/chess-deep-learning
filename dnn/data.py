@@ -51,7 +51,7 @@ class ChessDataGenerator:
                     'total': {
                         '$gte': self.config.trainer.min_position_visits_total,
                     }
-                }, sort=[('total', pymongo.DESCENDING)]
+                }, sort=[('total', pymongo.DESCENDING)], no_cursor_timeout=True
             )
 
             state, move_frequency = [], []
@@ -76,6 +76,8 @@ class ChessDataGenerator:
                     yield X, y
                     state = state[self.batch_size:]
                     move_frequency = move_frequency[self.batch_size:]
+
+            cursor.close()
 
     @threading_util.thread_safe_generator
     def generate_from_file(self):
