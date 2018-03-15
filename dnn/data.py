@@ -51,7 +51,7 @@ class ChessDataGenerator:
                     'total': {
                         '$gte': self.config.trainer.min_position_visits_total,
                     }
-                }, sort=[('total', pymongo.DESCENDING)], no_cursor_timeout=True
+                }, no_cursor_timeout=True
             )
 
             state, move_frequency = [], []
