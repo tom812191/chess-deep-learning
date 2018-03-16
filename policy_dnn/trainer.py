@@ -1,10 +1,10 @@
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
 from keras.optimizers import Adam
-from dnn.model import ChessModel
+from policy_dnn.model import ChessModel
 
 import config
-from dnn.data import ChessDataGenerator
+from policy_dnn.data import ChessDataGenerator
 
 
 class ChessModelTrainer:

@@ -22,7 +22,7 @@ class ChessModel:
         """
         Build the Keras model
         """
-        model_config = self.config.model
+        model_config = self.config.policy_model
         input_layer = model = Input(model_config.input_shape)
 
         # Build First convolution layer
@@ -56,7 +56,7 @@ class ChessModel:
         self.model = Model(input_layer, policy_out, name='chess_model')
 
     def _build_residual_block(self, model, index):
-        model_config = self.config.model
+        model_config = self.config.policy_model
         residual_block_name = 'res{}'.format(index)
         input_model = model
 

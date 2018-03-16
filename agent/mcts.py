@@ -63,7 +63,7 @@ class ChessSearchNode:
 
 class ChessMonteCarloTreeSearch:
     def __init__(self, cfg: config.Config, model, position_parser: ChessPositionParser, num_simulations=None,
-                 ucts_const=None, fen=chess.STARTING_FEN, deterministic=False, tau=None, stockfish=None,
+                 use_uct=False, ucts_const=None, fen=chess.STARTING_FEN, deterministic=False, tau=None, stockfish=None,
                  player_elo=1500, opponent_elo=1500, rating_transform_const=0.3):
         """
         Implement monte carlo tree search over possible chess moves.
@@ -86,6 +86,7 @@ class ChessMonteCarloTreeSearch:
 
         # Upper confidence tree score constant
         self.ucts_const = ucts_const or self.config.play.upper_confidence_tree_score_constant
+        self.use_utc = use_uct
 
         self.move_map = {chess.Move.from_uci(move): idx for idx, move in enumerate(self.config.labels)}
 
@@ -108,7 +109,7 @@ class ChessMonteCarloTreeSearch:
     def current_state(self):
         return self.board.fen()
 
-    def set_position(self, fen, num_simulations=None, tau=None, ucts_const=None):
+    def set_position(self, fen, num_simulations=None, tau=None, ucts_const=None, rating_transform_const=None):
         self.board = chess.Board(fen)
         self.position_parser.reset(fens=[fen], fens_have_counters=True)
         self.root = ChessSearchNode()
@@ -124,6 +125,9 @@ class ChessMonteCarloTreeSearch:
 
         if ucts_const is not None:
             self.ucts_const = ucts_const
+
+        if rating_transform_const is not None:
+            self.rating_transform_const = rating_transform_const
 
         return self
 
@@ -192,7 +196,7 @@ class ChessMonteCarloTreeSearch:
         node.visits += 1
 
         # Select the next node
-        move_index = self.select_child_stochastic(node)
+        move_index = self.select_child_stochastic(node) if not self.use_utc else self.select_child(node)
 
         # Search next move
         self.board.push(chess.Move.from_uci(self.config.labels[move_index]))

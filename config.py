@@ -13,21 +13,21 @@ class Config:
     show_warnings = False
 
     def __init__(self):
-        self.model = ModelConfig()
+        self.policy_model = PolicyModelConfig()
+        self.move_probability_model = MoveProbabilityModelConfig()
         self.resources = ResourceConfig()
         self.trainer = TrainerConfig()
         self.play = PlayerConfig()
         self.training_type = TrainingType
 
 
-class ModelConfig:
+class PolicyModelConfig:
     cnn_filter_num = 256
     cnn_first_filter_size = 5
     cnn_filter_size = 3
     res_layer_num = 7
     l2_reg = 1e-4
     value_fc_size = 256
-    distributed = True
 
     # 8x8 board with 20 channels
     # The 18 channels are:
@@ -36,6 +36,19 @@ class ModelConfig:
     #      1 for en passant
     #      1 for elo
     input_shape = (18, 8, 8)
+
+
+class MoveProbabilityModelConfig:
+    dense_layer_sizes = (256, 256)
+    l2_reg = 1e-4
+
+    # 101 node inputs are:
+    #      20 for prior move probabilities (ordered most likely to least likely)
+    #      80, 4 for each move that represent stockfish value at various depths after each move
+    #      1 for player elo rating
+    num_candidate_moves = 20
+    valuation_depths = [1, 5, 10]
+    input_size = num_candidate_moves * (len(valuation_depths) + 1) + 1
 
 
 class ResourceConfig:
@@ -47,6 +60,7 @@ class ResourceConfig:
     training_data_directory = os.path.join(data_directory, 'training')
 
     best_model_path = os.path.join(data_directory, 'best_model.hdf5')
+    best_move_model_path = os.path.join(data_directory, 'best_move_model.hdf5')
     database_settings_file = os.path.join(data_directory, 'db_settings.json')
 
     stockfish_path = os.path.join(data_directory, 'stockfish')
@@ -59,9 +73,9 @@ class TrainingType(Enum):
 
 class TrainerConfig:
     # one of (FILE, DATABASE)
-    train_type = TrainingType.FILE
+    train_type = TrainingType.DATABASE
 
-    continue_from_best = True
+    continue_from_best = False
 
     # Don't use convention that a single epoch is an iteration over all data. We'll want to save model more frequently.
     training_examples = 1863981

@@ -13,7 +13,7 @@ class Stockfish:
         self.stockfish.info_handlers.append(self.stockfish_info)
         self.search_depth = search_depth
 
-    def eval(self, board):
+    def eval(self, board, depth=None):
         # Check if game over
         if board.result() != '*':
             if board.result == '1/2-1/2':
@@ -22,8 +22,12 @@ class Stockfish:
             # If the game is over and not a draw, then the player to move has lost (tree search doesn't resign)
             return -100.0
 
+        d = self.search_depth
+        if depth is not None:
+            d = depth
+
         self.stockfish.position(board)
-        self.stockfish.go(depth=self.search_depth)
+        self.stockfish.go(depth=d)
 
         score = self.stockfish_info.info['score'][1]
         if score.cp is not None:

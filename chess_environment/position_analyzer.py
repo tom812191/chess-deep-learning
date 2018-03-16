@@ -28,17 +28,15 @@ class ChessPositionAnalyzer:
         self.mcts = mcts.ChessMonteCarloTreeSearch(self.config, self.model, self.position_parser,
                                                    stockfish=self.stockfish)
 
-    def analyze(self, mask_illegal=True, move_as_san=True,
-                mcts_num_simulations=None, mcts_tau=None, mcts_ucts_const=None):
+    def analyze(self, mask_illegal=True, move_as_san=True, run_search=True, mcts_kwargs=None):
 
-        if mcts_num_simulations:
+        if run_search:
             # Run monte carlo tree search and use the resulting value rollups and policy
             policy = self.mcts\
-                .set_position(self.fen, num_simulations=mcts_num_simulations, tau=mcts_tau, ucts_const=mcts_ucts_const)\
-                .get_mcts_policy()
+                .set_position(self.fen, **mcts_kwargs).get_mcts_policy()
 
         else:
-            # Use the dnn policy without search
+            # Use the policy_dnn policy without search
             dnn_input = self.position_parser.reset(
                 fens=[self.fen], elos=[self.elo], fens_have_counters=True, elos_are_normalized=False).get_canonical_input()
             policy = self.model.predict(dnn_input)
