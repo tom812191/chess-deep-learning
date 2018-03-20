@@ -9,10 +9,11 @@ from move_probability_nn.data import ChessMoveDataGenerator
 
 
 class ChessModelTrainer:
-    def __init__(self, cfg: config.Config, model: ChessMoveModel, policy_model: ChessModel):
+    def __init__(self, cfg: config.Config, model: ChessMoveModel, policy_model: ChessModel, policy_model_cv: ChessModel):
         self.config = cfg
         self.model = model
         self.policy_model = policy_model
+        self.policy_model_cv = policy_model_cv
 
     def train(self):
         compiled_model = self.model
@@ -23,7 +24,8 @@ class ChessModelTrainer:
         train_from_file = self.config.trainer.train_type == self.config.training_type.FILE
         training_generator = ChessMoveDataGenerator(self.config, self.policy_model, from_file=train_from_file)\
             .generate()
-        cross_validation_generator = ChessMoveDataGenerator(self.config, self.policy_model, from_file=train_from_file)\
+        cross_validation_generator = ChessMoveDataGenerator(self.config, self.policy_model_cv,
+                                                            from_file=train_from_file, is_cross_validation=True)\
             .generate()
 
         checkpoint_cb = ModelCheckpoint(filepath=self.config.resources.best_move_model_path,
@@ -32,9 +34,9 @@ class ChessModelTrainer:
                                         monitor='val_loss')
 
         compiled_model.fit_generator(generator=training_generator,
-                                     epochs=self.config.trainer.epochs,
-                                     steps_per_epoch=self.config.trainer.steps_per_epoch,
-                                     validation_steps=self.config.trainer.steps_per_epoch_cv,
+                                     epochs=self.config.trainer.epochs_moves,
+                                     steps_per_epoch=self.config.trainer.steps_per_epoch_moves,
+                                     validation_steps=self.config.trainer.steps_per_epoch_moves_cv,
                                      validation_data=cross_validation_generator,
                                      callbacks=[checkpoint_cb],
                                      verbose=1)
@@ -48,6 +50,7 @@ class ChessModelTrainer:
 if __name__ == '__main__':
     cfg = config.Config()
     policy_model = load_model(cfg.resources.best_model_path)
+    policy_model_cv = load_model(cfg.resources.best_model_path)
 
     if cfg.trainer.continue_from_best:
         model = load_model(cfg.resources.best_move_model_path)
@@ -55,5 +58,5 @@ if __name__ == '__main__':
         model = ChessMoveModel(cfg)
         model.build_model()
 
-    trainer = ChessModelTrainer(cfg, model, policy_model)
+    trainer = ChessModelTrainer(cfg, model, policy_model, policy_model_cv)
     trainer.train()

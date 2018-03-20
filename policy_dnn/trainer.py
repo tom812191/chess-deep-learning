@@ -20,7 +20,7 @@ class ChessModelTrainer:
 
         train_from_file = self.config.trainer.train_type == self.config.training_type.FILE
         training_generator = ChessDataGenerator(self.config, from_file=train_from_file).generate()
-        cross_validation_generator = ChessDataGenerator(self.config, from_file=train_from_file).generate()
+        cross_validation_generator = ChessDataGenerator(self.config, from_file=train_from_file, is_cross_validation=True).generate()
 
         checkpoint_cb = ModelCheckpoint(filepath=self.config.resources.best_model_path,
                                         save_best_only=True,

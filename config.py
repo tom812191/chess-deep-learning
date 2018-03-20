@@ -91,6 +91,11 @@ class TrainerConfig:
     min_position_visits_total = 6
     min_position_visits = 3
 
+    batch_size_moves = 64
+    steps_per_epoch_moves = 10
+    steps_per_epoch_moves_cv = 1
+    epochs_moves = 10
+
 
 class PlayerConfig:
     num_simulations = 1200

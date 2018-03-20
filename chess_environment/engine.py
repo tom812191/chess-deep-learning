@@ -1,3 +1,4 @@
+import numpy as np
 import chess.uci
 
 import config
@@ -13,7 +14,14 @@ class Stockfish:
         self.stockfish.info_handlers.append(self.stockfish_info)
         self.search_depth = search_depth
 
-    def eval(self, board, depth=None):
+    def eval(self, board, depth=None, as_value=False):
+        evaluation = self.stockfish_eval(board, depth=depth)
+        if as_value:
+            return self.stockfish_eval_to_value(evaluation)
+
+        return evaluation
+
+    def stockfish_eval(self, board, depth=None):
         # Check if game over
         if board.result() != '*':
             if board.result == '1/2-1/2':
@@ -39,3 +47,11 @@ class Stockfish:
 
         # Getting mated
         return -100.0
+
+    @staticmethod
+    def stockfish_eval_to_value(evaluation, k=0.6):
+        """
+        Convert the stockfish evaluation in the range of roughly -100 to +100 to -1 to +1 using
+        a logistic function
+        """
+        return 2 / (1 + np.exp(-k * evaluation)) - 1

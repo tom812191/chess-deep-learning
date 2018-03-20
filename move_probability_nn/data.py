@@ -35,6 +35,9 @@ class ChessMoveDataGenerator:
         self.stockfish = engine.Stockfish(self.config)
         self.move_map = {chess.Move.from_uci(move): idx for idx, move in enumerate(self.config.labels)}
 
+        self.num_candidate_moves = self.config.move_probability_model.num_candidate_moves
+        self.num_evals = len(self.config.move_probability_model.valuation_depths)
+
     def generate(self):
         if self.from_file:
             return self.generate_from_file()
@@ -117,27 +120,32 @@ class ChessMoveDataGenerator:
 
     def process_batch(self, fens, elos, moves):
         policies = self.policy_model.predict(self.position_parser.reset(fens=fens, elos=elos).get_canonical_input())
+
         evals = []
         priors = []
-
         counts = []
 
-        for fen, policy in zip(fens, policies.tolist()):
+        for fen, policy, position_moves in zip(fens, policies.tolist(), moves):
             board = self.board.copy()
             board.set_fen(fen + ' 0 1')
 
-            position_evals = []
-            position_priors = []
-            position_counts = []
-            for move in moves:
+            position_evals = [-1] * (self.num_candidate_moves * self.num_evals)
+            position_priors = [0] * self.num_candidate_moves
+            position_counts = [0] * self.num_candidate_moves
+            for move_idx, move in enumerate(position_moves):
+                if move_idx >= self.num_candidate_moves:
+                    break
+
                 m = chess.Move.from_uci(move['uci'])
 
-                position_priors.append(policy[self.move_map[m]])
-                position_counts.append(move['count'])
+                position_priors[move_idx] = policy[self.move_map[m]]
+                position_counts[move_idx] = move['count']
 
                 board.push(m)
-                for depth in self.config.move_probability_model.valuation_depths:
-                    position_evals.append(self.stockfish.eval(self.board, depth=depth))
+                for val_idx, depth in enumerate(self.config.move_probability_model.valuation_depths):
+                    position_evals[move_idx * self.num_evals + val_idx] = -1 * self.stockfish.eval(self.board,
+                                                                                                   depth=depth,
+                                                                                                   as_value=True)
                 board.pop()
 
             evals.append(position_evals)
@@ -149,7 +157,13 @@ class ChessMoveDataGenerator:
         priors = np.array(priors)
         counts = np.array(counts)
 
+        priors = priors / priors.sum(axis=1)[:, np.newaxis]
+
         X = np.concatenate((priors, evals, elos), axis=1)
         y = counts / counts.sum(axis=1)[:, np.newaxis]
+
+        assert len(X) == len(y)
+        assert y.shape[1] == self.num_candidate_moves
+        assert X.shape[1] == self.num_candidate_moves * (self.num_evals + 1) + 1
 
         return X, y
