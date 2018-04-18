@@ -39,7 +39,7 @@ class PolicyModelConfig:
 
 
 class MoveProbabilityModelConfig:
-    dense_layer_sizes = (256, 256)
+    dense_layer_sizes = (512, 512)
     l2_reg = 1e-4
 
     # 101 node inputs are:
@@ -47,7 +47,7 @@ class MoveProbabilityModelConfig:
     #      80, 4 for each move that represent stockfish value at various depths after each move
     #      1 for player elo rating
     num_candidate_moves = 20
-    valuation_depths = [1, 5, 10]
+    valuation_depths = [1, 3, 7, 10]
     input_size = num_candidate_moves * (len(valuation_depths) + 1) + 1
 
 
@@ -91,10 +91,10 @@ class TrainerConfig:
     min_position_visits_total = 6
     min_position_visits = 3
 
-    batch_size_moves = 64
+    batch_size_moves = 1  # 64
     steps_per_epoch_moves = 10
     steps_per_epoch_moves_cv = 1
-    epochs_moves = 10
+    epochs_moves = 20
 
 
 class PlayerConfig:

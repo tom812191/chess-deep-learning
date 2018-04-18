@@ -11,7 +11,7 @@ import config
 
 class ChessPositionAnalyzer:
     def __init__(self, model, labels, fen='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-                 elo=1500, time_control='3600+30'):
+                 player_elo=1500, opponent_elo=1500, time_control='3600+30'):
 
         self.config = config.Config()
 
@@ -19,14 +19,16 @@ class ChessPositionAnalyzer:
         self.labels = labels
 
         self.fen = fen
-        self.elo = time_control_elo_adjustment(time_control) + elo
+        self.player_elo = time_control_elo_adjustment(time_control) + player_elo
+        self.opponent_elo = time_control_elo_adjustment(time_control) + opponent_elo
         self.time_control = time_control
 
-        self.position_parser = ChessPositionParser(self.config, [fen], [elo],
+        self.position_parser = ChessPositionParser(self.config, [fen], [player_elo],
                                                    fens_have_counters=True, elos_are_normalized=False)
         self.stockfish = Stockfish(config.Config())
         self.mcts = mcts.ChessMonteCarloTreeSearch(self.config, self.model, self.position_parser,
-                                                   stockfish=self.stockfish)
+                                                   stockfish=self.stockfish, player_elo=player_elo,
+                                                   opponent_elo=opponent_elo)
 
     def analyze(self, mask_illegal=True, move_as_san=True, run_search=True, mcts_kwargs=None):
 
@@ -36,7 +38,7 @@ class ChessPositionAnalyzer:
                 .set_position(self.fen, **mcts_kwargs).get_mcts_policy()
 
         else:
-            # Use the policy_dnn policy without search
+            # Use the prior move probability without search
             dnn_input = self.position_parser.reset(
                 fens=[self.fen], elos=[self.elo], fens_have_counters=True, elos_are_normalized=False).get_canonical_input()
             policy = self.model.predict(dnn_input)

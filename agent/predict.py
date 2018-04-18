@@ -27,6 +27,10 @@ class MovePredictor:
 
     def predict(self, fen, elo, fen_has_counters=False, elo_is_normalized=True):
         board = chess.Board(self._full_fen(fen))
+        is_white = board.turn == chess.WHITE
+        if not elo_is_normalized:
+            elo = self.normalize_elo(elo)
+
         policy_input = self.position_parser.reset(fens=[fen], elos=[elo], fens_have_counters=fen_has_counters,
                                                   elos_are_normalized=elo_is_normalized).get_canonical_input()
 
@@ -41,12 +45,12 @@ class MovePredictor:
                 'valuations': []
             }
             for depth in self.config.move_probability_model.valuation_depths:
-                move['valuations'].append(-1 * self.stockfish.eval(board, depth=depth, as_value=True))
+                move['valuations'].append(self.stockfish.eval(board, depth=depth, as_value=True))
 
             board.pop()
             legal_moves.append(move)
 
-        legal_moves = sorted(legal_moves, key=lambda m: m['valuations'][-1], reverse=True)
+        legal_moves = sorted(legal_moves, key=lambda m: m['valuations'][-1], reverse=is_white)
         legal_moves = legal_moves[:self.num_candidate_moves]
 
         evals = [-1.0] * (self.num_candidate_moves * self.num_evals)
@@ -55,7 +59,7 @@ class MovePredictor:
             priors[move_idx] = move['policy']
 
             for val_idx, val in enumerate(move['valuations']):
-                evals[move_idx * self.num_evals + val_idx] = val
+                evals[move_idx * self.num_evals + val_idx] = val * (1 if is_white else -1)
 
         model_input = np.array([priors + evals + [float(elo)]])
         probs = self.move_probability_model.predict(model_input)[0]
@@ -65,7 +69,10 @@ class MovePredictor:
 
         moves_out = {}
         for move, move_prob in zip(legal_moves, probs):
-            moves_out[move['move']] = move_prob
+            moves_out[move['move']] = {
+                'probability': move_prob,
+                'value': move['valuations'][-1]
+            }
 
         return moves_out
 
@@ -75,6 +82,13 @@ class MovePredictor:
             return fen
 
         return fen + ' 0 1'
+
+    @staticmethod
+    def normalize_elo(elo):
+        """
+        Normalize elo on the range of -1 to 1, assuming min elo is 0 and max elo is 3000
+        """
+        return elo / 1500 - 1
 
 
 if __name__ == '__main__':

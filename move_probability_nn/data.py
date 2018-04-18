@@ -2,9 +2,11 @@
 Data generator for training
 """
 import numpy as np
+import pandas as pd
 import json
 import pymongo
 import chess
+from itertools import product
 
 import config
 from chess_environment import position_parser, engine
@@ -12,10 +14,12 @@ from util import threading_util
 
 
 class ChessMoveDataGenerator:
-    def __init__(self, cfg: config.Config, policy_model, from_file=False, is_cross_validation=False):
+    def __init__(self, cfg: config.Config, policy_model, from_file=False, is_cross_validation=False,
+                 yield_meta=False):
         self.config = cfg
         self.batch_size = self.config.trainer.batch_size
         self.is_cross_validation = is_cross_validation
+        self.yield_meta = yield_meta
 
         self.from_file = from_file
 
@@ -79,9 +83,12 @@ class ChessMoveDataGenerator:
                     elos_batch = elos[:self.batch_size]
                     moves_batch = moves[:self.batch_size]
 
-                    X, y = self.process_batch(fens_batch, elos_batch, moves_batch)
-
-                    yield X, y
+                    if self.yield_meta:
+                        X, y, fens, moves = self.process_batch(fens_batch, elos_batch, moves_batch)
+                        yield X, y, fens, moves
+                    else:
+                        X, y = self.process_batch(fens_batch, elos_batch, moves_batch)
+                        yield X, y
 
                     fens = fens[self.batch_size:]
                     elos = elos[self.batch_size:]
@@ -128,6 +135,7 @@ class ChessMoveDataGenerator:
         for fen, policy, position_moves in zip(fens, policies.tolist(), moves):
             board = self.board.copy()
             board.set_fen(fen + ' 0 1')
+            is_white = board.turn == chess.WHITE
 
             position_evals = [-1] * (self.num_candidate_moves * self.num_evals)
             position_priors = [0] * self.num_candidate_moves
@@ -143,9 +151,12 @@ class ChessMoveDataGenerator:
 
                 board.push(m)
                 for val_idx, depth in enumerate(self.config.move_probability_model.valuation_depths):
-                    position_evals[move_idx * self.num_evals + val_idx] = -1 * self.stockfish.eval(self.board,
-                                                                                                   depth=depth,
-                                                                                                   as_value=True)
+                    value = self.stockfish.eval(self.board, depth=depth, as_value=True)
+
+                    if not is_white:
+                        value *= -1
+
+                    position_evals[move_idx * self.num_evals + val_idx] = value
                 board.pop()
 
             evals.append(position_evals)
@@ -166,4 +177,30 @@ class ChessMoveDataGenerator:
         assert y.shape[1] == self.num_candidate_moves
         assert X.shape[1] == self.num_candidate_moves * (self.num_evals + 1) + 1
 
+        if self.yield_meta:
+            return X, y, fens, moves
+
         return X, y
+
+    def generate_data_frame(self):
+        assert self.yield_meta
+
+        for X, y, fens, moves in self.generate():
+            columns_X = [f'prior_{m}' for m in range(self.num_candidate_moves)] + \
+                        [f'eval_{m}_d{d}' for m, d in product(range(self.num_candidate_moves), self.config.move_probability_model.valuation_depths)] + \
+                        ['elo']
+            df_X = pd.DataFrame(X, columns=columns_X)
+
+            columns_y = [f'actual_freq_{m}' for m in range(self.num_candidate_moves)]
+            df_y = pd.DataFrame(y, columns=columns_y)
+
+            df_fens = pd.DataFrame(fens, columns=['fen'])
+
+            columns_moves = [f'move_{m}' for m in range(self.num_candidate_moves)]
+            data_moves = [[m['uci'] for m in move] for move in moves]
+            df_moves = pd.DataFrame(data_moves, columns=columns_moves)
+
+            yield pd.concat((df_fens, df_moves, df_X, df_y), axis=1)
+
+
+

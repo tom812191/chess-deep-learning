@@ -15,7 +15,14 @@ class Stockfish:
         self.search_depth = search_depth
 
     def eval(self, board, depth=None, as_value=False):
+        """
+        Returns the position evaluation from the perspective of white. I.e. a positive evaluation indicates that
+        white is winning.
+        """
         evaluation = self.stockfish_eval(board, depth=depth)
+        if board.turn == chess.BLACK:
+            evaluation *= -1
+
         if as_value:
             return self.stockfish_eval_to_value(evaluation)
 
