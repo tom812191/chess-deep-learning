@@ -16,6 +16,9 @@ from util import threading_util
 class ChessMoveDataGenerator:
     def __init__(self, cfg: config.Config, policy_model, from_file=False, is_cross_validation=False,
                  yield_meta=False):
+        """
+        A data generator for our keras implementation of the neural network
+        """
         self.config = cfg
         self.batch_size = self.config.trainer.batch_size_moves
         self.is_cross_validation = is_cross_validation

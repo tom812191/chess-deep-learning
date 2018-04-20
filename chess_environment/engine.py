@@ -29,6 +29,9 @@ class Stockfish:
         return evaluation
 
     def stockfish_eval(self, board, depth=None):
+        """
+        Call the Stockfish engine to evaluate the position
+        """
         # Check if game over
         if board.result() != '*':
             if board.result == '1/2-1/2':

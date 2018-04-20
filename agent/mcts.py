@@ -94,25 +94,29 @@ class ChessSearchNode:
 
 class ChessMonteCarloTreeSearch:
     def __init__(self, cfg: config.Config, move_predictor: predict.MovePredictor, position_parser: ChessPositionParser,
-                 num_simulations=None, fen=chess.STARTING_FEN, deterministic=False, stockfish=None,
-                 player_elo=1500, opponent_elo=1500, rating_transform_const=0.3, deterministic_moves=None):
+                 num_simulations=None, fen=chess.STARTING_FEN, stockfish=None,
+                 player_elo=1500, opponent_elo=1500, deterministic_moves=None):
         """
-        Implement monte carlo tree search over possible chess moves.
+        Implement a stochastic MCTS
 
-        :param cfg: Global configuration
-        :param position_parser: a ChessPositionParser instance that already contains elo and time control info
-        :param deterministic: If true, select the move deterministically, otherwise select probabilistically
+        :param cfg:
+        :param move_predictor:
+        :param position_parser:
+        :param num_simulations:
+        :param fen:
+        :param stockfish:
+        :param player_elo:
+        :param opponent_elo:
+        :param deterministic_moves:
         """
         self.config = cfg
         self.move_predictor = move_predictor
         self.position_parser = position_parser
         self.num_simulations = num_simulations or self.config.play.num_simulations
-        self.deterministic = deterministic
         self.deterministic_moves = deterministic_moves if deterministic_moves is not None else {}
 
         self.player_elo = player_elo
         self.opponent_elo = opponent_elo
-        self.rating_transform_const = rating_transform_const
 
         self.move_map = {chess.Move.from_uci(move): idx for idx, move in enumerate(self.config.labels)}
 
@@ -139,8 +143,10 @@ class ChessMonteCarloTreeSearch:
     def our_move(self):
         return (self.board.turn == chess.WHITE) and self.is_white
 
-    def set_position(self, fen, player_elo=None, opponent_elo=None, num_simulations=None,
-                     rating_transform_const=None, deterministic_moves=None):
+    def set_position(self, fen, player_elo=None, opponent_elo=None, num_simulations=None, deterministic_moves=None):
+        """
+        Reset the MCTS with a new position
+        """
         self.board = chess.Board(fen)
         self.position_parser.reset(fens=[fen], elos=[self.player_elo], fens_have_counters=True)
         self.root = ChessSearchNode()
@@ -156,9 +162,6 @@ class ChessMonteCarloTreeSearch:
 
         if num_simulations is not None:
             self.num_simulations = num_simulations
-
-        if rating_transform_const is not None:
-            self.rating_transform_const = rating_transform_const
 
         if deterministic_moves is not None:
             self.deterministic_moves = deterministic_moves
