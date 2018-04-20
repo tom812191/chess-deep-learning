@@ -39,8 +39,12 @@ class PolicyModelConfig:
 
 
 class MoveProbabilityModelConfig:
-    dense_layer_sizes = (512, 512)
-    l2_reg = 1e-4
+    dense_layer_sizes = (128, 128)
+    l2_reg = 7e-5
+
+    # Best val 1.79
+    # dense_layer_sizes = (128, 128)
+    # l2_reg = 1e-5
 
     # 101 node inputs are:
     #      20 for prior move probabilities (ordered most likely to least likely)
@@ -58,10 +62,12 @@ class ResourceConfig:
     lichess_download_list_cv = os.path.join(data_directory, 'lichess_download_list_cv.txt')
     download_chunk_size = 10 * 1024  # 1024 * 1024 * 8  # 8 MB
     training_data_directory = os.path.join(data_directory, 'training')
+    move_data_directory = os.path.join(data_directory, 'move_training')
 
     best_model_path = os.path.join(data_directory, 'best_model.hdf5')
     best_move_model_path = os.path.join(data_directory, 'best_move_model.hdf5')
     database_settings_file = os.path.join(data_directory, 'db_settings.json')
+    eco_file = os.path.join(data_directory, 'eco.json')
 
     stockfish_path = os.path.join(data_directory, 'stockfish')
 
@@ -91,7 +97,7 @@ class TrainerConfig:
     min_position_visits_total = 6
     min_position_visits = 3
 
-    batch_size_moves = 1  # 64
+    batch_size_moves = 2048
     steps_per_epoch_moves = 10
     steps_per_epoch_moves_cv = 1
     epochs_moves = 20

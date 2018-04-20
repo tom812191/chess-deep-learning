@@ -17,7 +17,7 @@ class ChessMoveDataGenerator:
     def __init__(self, cfg: config.Config, policy_model, from_file=False, is_cross_validation=False,
                  yield_meta=False):
         self.config = cfg
-        self.batch_size = self.config.trainer.batch_size
+        self.batch_size = self.config.trainer.batch_size_moves
         self.is_cross_validation = is_cross_validation
         self.yield_meta = yield_meta
 
@@ -151,7 +151,7 @@ class ChessMoveDataGenerator:
 
                 board.push(m)
                 for val_idx, depth in enumerate(self.config.move_probability_model.valuation_depths):
-                    value = self.stockfish.eval(self.board, depth=depth, as_value=True)
+                    value = self.stockfish.eval(board, depth=depth, as_value=True)
 
                     if not is_white:
                         value *= -1
@@ -197,7 +197,7 @@ class ChessMoveDataGenerator:
             df_fens = pd.DataFrame(fens, columns=['fen'])
 
             columns_moves = [f'move_{m}' for m in range(self.num_candidate_moves)]
-            data_moves = [[m['uci'] for m in move] for move in moves]
+            data_moves = [[m['uci'] for m in move[:self.num_candidate_moves]] for move in moves]
             df_moves = pd.DataFrame(data_moves, columns=columns_moves)
 
             yield pd.concat((df_fens, df_moves, df_X, df_y), axis=1)

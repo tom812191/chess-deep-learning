@@ -34,6 +34,7 @@ class ChessSearchNode:
         self.visits = 0
         self.static_value = None
         self._rollup_value = None
+        self._move_probability = None
 
         self.children_created = False
         self.our_move = True
@@ -69,22 +70,36 @@ class ChessSearchNode:
             self._rollup_value = self.static_value
             return self.static_value
 
-        child_static_values = np.array([self.children[child_idx].static_value
+        child_rollup_values = np.array([self.children[child_idx].rollup_value
                                         for child_idx in self.child_move_indexes])
-        self._rollup_value = np.dot(child_static_values, self.child_policy)
+        self._rollup_value = np.dot(child_rollup_values, self.child_policy)
 
         return self._rollup_value
+
+    @property
+    def move_probability(self):
+        """
+        The probability of taking the specific branch
+        """
+        if self._move_probability is not None:
+            return self._move_probability
+
+        if self.parent is None:
+            self._move_probability = self.prior_probability
+        else:
+            self._move_probability = self.parent.move_probability * self.prior_probability
+
+        return self._move_probability
 
 
 class ChessMonteCarloTreeSearch:
     def __init__(self, cfg: config.Config, move_predictor: predict.MovePredictor, position_parser: ChessPositionParser,
                  num_simulations=None, fen=chess.STARTING_FEN, deterministic=False, stockfish=None,
-                 player_elo=1500, opponent_elo=1500, rating_transform_const=0.3):
+                 player_elo=1500, opponent_elo=1500, rating_transform_const=0.3, deterministic_moves=None):
         """
         Implement monte carlo tree search over possible chess moves.
 
         :param cfg: Global configuration
-        :param model: Policy/value deep neural network
         :param position_parser: a ChessPositionParser instance that already contains elo and time control info
         :param deterministic: If true, select the move deterministically, otherwise select probabilistically
         """
@@ -93,6 +108,7 @@ class ChessMonteCarloTreeSearch:
         self.position_parser = position_parser
         self.num_simulations = num_simulations or self.config.play.num_simulations
         self.deterministic = deterministic
+        self.deterministic_moves = deterministic_moves if deterministic_moves is not None else {}
 
         self.player_elo = player_elo
         self.opponent_elo = opponent_elo
@@ -123,19 +139,29 @@ class ChessMonteCarloTreeSearch:
     def our_move(self):
         return (self.board.turn == chess.WHITE) and self.is_white
 
-    def set_position(self, fen, num_simulations=None, rating_transform_const=None):
+    def set_position(self, fen, player_elo=None, opponent_elo=None, num_simulations=None,
+                     rating_transform_const=None, deterministic_moves=None):
         self.board = chess.Board(fen)
-        self.position_parser.reset(fens=[fen], fens_have_counters=True)
+        self.position_parser.reset(fens=[fen], elos=[self.player_elo], fens_have_counters=True)
         self.root = ChessSearchNode()
         self.move_probabilities = None
         self.is_white = self.board.turn == chess.WHITE
         self.root_move_counter = int(fen.split(' ')[-1]) + (0 if self.is_white else 0.5)
+
+        if player_elo is not None:
+            self.player_elo = player_elo
+
+        if opponent_elo is not None:
+            self.opponent_elo = opponent_elo
 
         if num_simulations is not None:
             self.num_simulations = num_simulations
 
         if rating_transform_const is not None:
             self.rating_transform_const = rating_transform_const
+
+        if deterministic_moves is not None:
+            self.deterministic_moves = deterministic_moves
 
         return self
 
@@ -191,8 +217,12 @@ class ChessMonteCarloTreeSearch:
         legal moves.
         """
         fen = self.board.fen()
+        partial_fen = ' '.join(fen.split(' ')[:-2])
         elo = self.player_elo if self.our_move else self.opponent_elo
         moves = self.move_predictor.predict(fen, elo, fen_has_counters=True, elo_is_normalized=False)
+
+        if partial_fen in self.deterministic_moves:
+            return self.expand_node_deterministic(partial_fen, moves)
 
         policy, values, legal_move_indexes = [], [], []
         for move, data in moves.items():
@@ -200,6 +230,16 @@ class ChessMonteCarloTreeSearch:
             values.append(data['value'])
             legal_move_indexes.append(self.move_map[move])
 
+        return policy, values, legal_move_indexes
+
+    def expand_node_deterministic(self, partial_fen, moves):
+        """
+        Expand the node with a move from a predetermined move tree
+        """
+        san = self.deterministic_moves[partial_fen]
+        move = self.board.parse_san(san)
+
+        policy, values, legal_move_indexes = [1.0], [moves[move]['value']], [self.move_map[move]]
         return policy, values, legal_move_indexes
 
     @staticmethod
@@ -231,7 +271,7 @@ class ChessMonteCarloTreeSearch:
 
                 'static_value': node.static_value,
                 'rollup_value': node.rollup_value,
-                'move_probability': float(node.prior_probability),
+                'move_probability': node.move_probability,
             }
 
             if node.children_created and node.depth < max_depth:
@@ -248,6 +288,9 @@ class ChessMonteCarloTreeSearch:
         board = self.board.copy()
         tree = process_tree(self.root, board)
         return json.dumps(tree, indent=2)
+
+    def get_evals(self):
+        return self.root.static_value, self.root.rollup_value
 
     @staticmethod
     def stockfish_eval_to_value(evaluation, k=0.6):

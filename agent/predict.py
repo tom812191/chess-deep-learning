@@ -3,6 +3,7 @@ Predicts probability distribution of the next move
 """
 import numpy as np
 import chess
+from random import shuffle
 from keras.models import load_model
 
 from chess_environment.engine import Stockfish
@@ -52,6 +53,7 @@ class MovePredictor:
 
         legal_moves = sorted(legal_moves, key=lambda m: m['valuations'][-1], reverse=is_white)
         legal_moves = legal_moves[:self.num_candidate_moves]
+        shuffle(legal_moves)
 
         evals = [-1.0] * (self.num_candidate_moves * self.num_evals)
         priors = [0.0] * self.num_candidate_moves
