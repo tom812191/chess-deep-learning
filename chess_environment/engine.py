@@ -5,7 +5,7 @@ import config
 
 
 class Stockfish:
-    def __init__(self, cfg: config.Config, search_depth=5):
+    def __init__(self, cfg: config.Config, search_depth=25):
         self.config = cfg
 
         self.stockfish = chess.uci.popen_engine(self.config.resources.stockfish_path)
